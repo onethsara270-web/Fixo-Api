@@ -1,0 +1,95 @@
+<%- include('partials/head', { title: 'Dashboard' }) %>
+<%- include('partials/nav') %>
+
+<section class="dash-page">
+  <div class="container">
+    <div class="dash-head">
+      <div>
+        <h1>Welcome, <%= user.name.split(' ')[0] %></h1>
+        <p class="muted"><%= user.email %></p>
+      </div>
+      <% if (user.role === 'admin') { %>
+        <a href="/admin" class="btn btn-ghost">Admin Panel →</a>
+      <% } %>
+    </div>
+
+    <div class="dash-section">
+      <div class="dash-section-head">
+        <h2>API Keys</h2>
+        <button class="btn btn-primary" onclick="createKey()">+ Generate Key</button>
+      </div>
+
+      <% if (keys.length === 0) { %>
+        <div class="empty-state glass">
+          <p>No keys yet. Generate one to start integrating.</p>
+        </div>
+      <% } else { %>
+        <div class="keys-list">
+          <% keys.forEach(k => { %>
+            <div class="key-row glass">
+              <div>
+                <div class="key-label"><%= k.label %></div>
+                <code class="key-value" data-key="<%= k.key %>"><%= k.key.slice(0, 12) %>••••••••<%= k.key.slice(-4) %></code>
+              </div>
+              <div class="key-meta">
+                <span class="badge <%= k.active ? 'ok' : 'revoked' %>"><%= k.active ? 'active' : 'revoked' %></span>
+                <span class="key-date"><%= new Date(k.createdAt).toLocaleDateString() %></span>
+              </div>
+              <div class="key-actions">
+                <% if (k.active) { %>
+                  <button class="btn btn-sm" onclick="copyKey(this, '<%= k.key %>')">Copy</button>
+                  <button class="btn btn-sm btn-danger" onclick="revokeKey('<%= k._id %>')">Revoke</button>
+                <% } %>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="dash-section">
+      <h2>Available APIs</h2>
+      <div class="features-grid">
+        <% apis.forEach((api, i) => { %>
+          <a href="/docs/<%= api.slug %>" class="feature glass" style="text-decoration:none;color:inherit">
+            <h3><%= api.title %></h3>
+            <p><%= api.tagline %></p>
+            <span class="badge"><%= api.method %></span>
+          </a>
+        <% }) %>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+async function createKey() {
+  const label = prompt('Key label (e.g. "Production bot"):', 'Default');
+  if (!label) return;
+  const r = await fetch('/api/keys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label })
+  });
+  const data = await r.json();
+  if (data.success) {
+    alert('Your new key:\n\n' + data.key.key + '\n\nSave it now — you won\'t see it again.');
+    location.reload();
+  }
+}
+
+async function revokeKey(id) {
+  if (!confirm('Revoke this key? Existing integrations will stop working.')) return;
+  await fetch('/api/keys/' + id, { method: 'DELETE' });
+  location.reload();
+}
+
+function copyKey(btn, key) {
+  navigator.clipboard.writeText(key);
+  const orig = btn.textContent;
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+
+<%- include('partials/foot') %>
