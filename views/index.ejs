@@ -1,0 +1,70 @@
+<%- include('partials/head', { title: 'Developer API Platform' }) %>
+<%- include('partials/nav') %>
+
+<section class="hero">
+  <div class="container hero-grid">
+    <div>
+      <div class="eyebrow">developer-first platform</div>
+      <h1>Ship integrations <br><span class="accent">at the speed of thought.</span></h1>
+      <p>fixo api is a unified gateway for media, AI, and utility endpoints. One key. Zero friction.</p>
+      <div class="hero-actions">
+        <a href="/docs" class="btn btn-primary">Explore Docs →</a>
+        <a href="/register" class="btn btn-ghost">Create Account</a>
+      </div>
+    </div>
+    <div class="hero-card glass">
+      <div class="code-head">
+        <span class="active"></span><span></span><span></span>
+        <em>POST /v1/request</em>
+      </div>
+      <div class="code-body">
+<span class="c">// one key. every endpoint.</span><br>
+<span class="k">const</span> res = <span class="k">await</span> fetch(<span class="s">"https://api.fixo.dev"</span>, {<br>
+&nbsp;&nbsp;headers: { <span class="s">"X-API-KEY"</span>: key }<br>
+});
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-num" data-count="42">0</div><div class="stat-label">Endpoints</div></div>
+      <div class="stat"><div class="stat-num" data-count="99" data-suffix=".9%">0</div><div class="stat-label">Uptime</div></div>
+      <div class="stat"><div class="stat-num" data-count="180" data-suffix="ms">0</div><div class="stat-label">Latency</div></div>
+      <div class="stat"><div class="stat-num" data-count="12" data-suffix="k+">0</div><div class="stat-label">Developers</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="container">
+    <div class="eyebrow">capabilities</div>
+    <h2>Everything you need.</h2>
+    <p class="section-lead">Focused endpoints for real products.</p>
+    <div class="features-grid">
+      <% apis.forEach((api, i) => { %>
+        <a href="/docs/<%= api.slug %>" class="feature glass reveal d<%= (i % 6) + 1 %>" style="text-decoration:none;color:inherit">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16M4 12h10M4 17h14"/></svg>
+          </div>
+          <h3><%= api.title %></h3>
+          <p><%= api.tagline %></p>
+        </a>
+      <% }) %>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="cta-box glass">
+      <h2>Ready to build?</h2>
+      <p>Get your API key in under 30 seconds.</p>
+      <a href="/register" class="btn btn-primary">Create Free Account →</a>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/foot') %>
