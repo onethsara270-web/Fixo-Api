@@ -1,0 +1,54 @@
+<%- include('partials/head', { title: api.title }) %>
+<%- include('partials/nav') %>
+
+<section class="api-detail-page">
+  <div class="container">
+    <a href="/docs" class="back-link">← All endpoints</a>
+
+    <div class="api-detail-head">
+      <span class="method <%= api.method.toLowerCase() %>"><%= api.method %></span>
+      <h1>/<%= api.slug %></h1>
+    </div>
+    <p class="api-detail-tagline"><%= api.tagline %></p>
+    <p class="api-detail-desc"><%= api.description %></p>
+
+    <% if (api.status === 'coming_soon') { %>
+      <div class="notice glass">
+        <strong>Coming soon.</strong> This endpoint is documented but not yet live. 
+        <%= user ? 'You\'ll get access automatically when it launches.' : 'Sign up to get notified.' %>
+      </div>
+    <% } %>
+
+    <div class="api-detail-section">
+      <h2>Parameters</h2>
+      <table class="params-table glass">
+        <thead>
+          <tr><th>Name</th><th>Type</th><th>Required</th><th>Example</th></tr>
+        </thead>
+        <tbody>
+          <% api.params.forEach(p => { %>
+            <tr>
+              <td><code><%= p.name %></code></td>
+              <td><%= p.type %></td>
+              <td><%= p.required ? '<span class="req">required</span>' : 'optional' %></td>
+              <td><code class="muted"><%= p.example %></code></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="api-detail-section">
+      <h2>Example request</h2>
+      <pre class="code-block"><%= api.example %></pre>
+    </div>
+
+    <div class="api-detail-section">
+      <h2>Authentication</h2>
+      <p class="muted">Include your API key in the request header:</p>
+      <pre class="code-block">X-API-KEY: sk_your_key_here</pre>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/foot') %>
