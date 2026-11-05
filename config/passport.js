@@ -33,20 +33,24 @@ module.exports = (passport) => {
       let user = await User.findOne({ googleId: profile.id });
 
       if (!user) {
-        // check if email already registered locally
-        const email = profile.emails[0].value.toLowerCase();
+        const email = profile.emails && profile.emails.length > 0 ? profile.emails[0].value.toLowerCase() : null;
+        if (!email) return done(null, false, { message: 'No email found from Google' });
+
         user = await User.findOne({ email });
+
+        // Photo එකක් නැත්නම් null වෙනවා, crash වෙන්නේ නෑ
+        const avatarUrl = profile.photos && profile.photos.length > 0 ? profile.photos[0].value : null;
 
         if (user) {
           user.googleId = profile.id;
-          user.avatar = user.avatar || profile.photos[0]?.value;
+          user.avatar = user.avatar || avatarUrl;
           await user.save();
         } else {
           user = await User.create({
             googleId: profile.id,
             email,
             name: profile.displayName,
-            avatar: profile.photos[0]?.value,
+            avatar: avatarUrl,
             role: (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).includes(email) ? 'admin' : 'user'
           });
         }
