@@ -1,0 +1,80 @@
+<%- include('partials/head', { title: 'Admin' }) %>
+<%- include('partials/nav') %>
+
+<section class="admin-page">
+  <div class="container">
+    <div class="eyebrow">restricted area</div>
+    <h1>Admin Panel</h1>
+
+    <div class="admin-stats">
+      <div class="stat-card glass">
+        <div class="stat-num"><%= stats.totalUsers %></div>
+        <div class="stat-label">Total users</div>
+      </div>
+      <div class="stat-card glass">
+        <div class="stat-num"><%= stats.totalKeys %></div>
+        <div class="stat-label">Total keys</div>
+      </div>
+      <div class="stat-card glass">
+        <div class="stat-num"><%= stats.activeKeys %></div>
+        <div class="stat-label">Active keys</div>
+      </div>
+      <div class="stat-card glass">
+        <div class="stat-num"><%= stats.totalRequests %></div>
+        <div class="stat-label">Total requests</div>
+      </div>
+    </div>
+
+    <h2>Users</h2>
+    <div class="admin-table glass">
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th><th></th></tr></thead>
+        <tbody>
+          <% users.forEach(u => { %>
+            <tr>
+              <td><%= u.name %></td>
+              <td><code><%= u.email %></code></td>
+              <td><span class="badge <%= u.role === 'admin' ? 'ok' : '' %>"><%= u.role %></span></td>
+              <td><%= new Date(u.createdAt).toLocaleDateString() %></td>
+              <td>
+                <form action="/admin/users/<%= u._id %>/role" method="POST" style="display:inline">
+                  <select name="role" onchange="this.form.submit()">
+                    <option value="user" <%= u.role === 'user' ? 'selected' : '' %>>user</option>
+                    <option value="admin" <%= u.role === 'admin' ? 'selected' : '' %>>admin</option>
+                  </select>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>API Keys</h2>
+    <div class="admin-table glass">
+      <table>
+        <thead><tr><th>Key</th><th>Owner</th><th>Label</th><th>Status</th><th>Requests</th><th></th></tr></thead>
+        <tbody>
+          <% keys.forEach(k => { %>
+            <tr>
+              <td><code><%= k.key.slice(0, 16) %>...<%= k.key.slice(-4) %></code></td>
+              <td><%= k.owner ? k.owner.email : 'deleted user' %></td>
+              <td><%= k.label %></td>
+              <td><span class="badge <%= k.active ? 'ok' : 'revoked' %>"><%= k.active ? 'active' : 'revoked' %></span></td>
+              <td><%= k.requestCount || 0 %></td>
+              <td>
+                <% if (k.active) { %>
+                  <form action="/admin/keys/<%= k._id %>/revoke" method="POST" style="display:inline">
+                    <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/foot') %>
