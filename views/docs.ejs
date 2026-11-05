@@ -1,0 +1,26 @@
+<%- include('partials/head', { title: 'Documentation' }) %>
+<%- include('partials/nav') %>
+
+<section class="docs-page">
+  <div class="container">
+    <div class="eyebrow">documentation</div>
+    <h1>API Reference</h1>
+    <p class="section-lead">All endpoints require <code class="inline">X-API-KEY</code> header. Get your key from the <a href="/dashboard">dashboard</a>.</p>
+
+    <div class="docs-grid">
+      <% apis.forEach(api => { %>
+        <a href="/docs/<%= api.slug %>" class="doc-card glass">
+          <div class="doc-card-head">
+            <span class="method <%= api.method.toLowerCase() %>"><%= api.method %></span>
+            <span class="path">/<%= api.slug %></span>
+          </div>
+          <h3><%= api.title %></h3>
+          <p><%= api.tagline %></p>
+          <span class="doc-card-link">Read docs →</span>
+        </a>
+      <% }) %>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/foot') %>
