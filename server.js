@@ -2,13 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
-const MongoStore = require('connect-mongo');
+const MongoStore = require('connect-mongo').default; // මෙතන .default එකතු කළා
 const passport = require('passport');
 const path = require('path');
 
 const app = express();
 
-// ── Trust Proxy (Render/Heroku සඳහා අත්‍යවශ්‍යයි) ──────
+// ── Trust Proxy (Render සඳහා) ─────────────────────
 app.set('trust proxy', 1);
 
 // ── Database ──────────────────────────────────────
@@ -38,7 +38,7 @@ app.use(session({
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Production (Render) වලදී true වේ
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax'
   }
 }));
