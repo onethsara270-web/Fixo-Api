@@ -1,28 +1,53 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const ytdl = require('@distube/ytdl-core'); // අලුත් ලයිබ්‍රරි එක
 const { requireApiKey } = require('../middleware/apiAuth');
+
+// ── Helper: Stream URL to Response ─────
+// අපි ලින්ක් එකක් අරගෙන ඒක කෙලින්ම ෆෝන් එකට/බොට් එකට ස්ට්‍රීම් කරනවා
+async function streamMedia(url, res, filename, mimetype) {
+  try {
+    const response = await axios({
+      method: 'get',
+      url: url,
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': '*/*'
+      }
+    });
+
+    res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.header('Content-Type', mimetype);
+    
+    response.data.pipe(res);
+  } catch (err) {
+    console.error('Streaming error:', err.message);
+    res.status(500).json({ error: 'Failed to stream media file' });
+  }
+}
 
 // ── 1. YouTube Song (MP3) ─────
 router.get('/song', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
-    if (!ytdl.validateURL(url)) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    const info = await ytdl.getInfo(url);
-    const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
-
-    // Browser එකට ෆයිල් එක යවනවා
-    res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(info.videoDetails.title)}.mp3"`);
-    res.header('Content-Type', 'audio/mpeg');
+    // Render බ්ලොක් නොවෙන්න Third-party API එකකින් ලින්ක් එක ගන්නවා
+    const apiRes = await axios.get(`https://api.vreden.my.id/api/ytmp3?url=${encodeURIComponent(url)}`, { timeout: 15000 });
     
-    // ස්ට්‍රීම් කරනවා
-    ytdl(url, { format: format }).pipe(res);
+    if (!apiRes.data?.status || !apiRes.data?.result?.download?.url) {
+      throw new Error('API failed to extract audio');
+    }
+
+    const downloadUrl = apiRes.data.result.download.url;
+    const title = apiRes.data.result.metadata?.title || 'song';
+
+    // ලින්ක් එක බොට් එකට ස්ට්‍රීම් කරනවා
+    await streamMedia(downloadUrl, res, `${title}.mp3`, 'audio/mpeg');
 
   } catch (err) {
-    console.error(err);
+    console.error('[Song API]', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Error fetching song details' });
   }
 });
@@ -32,18 +57,21 @@ router.get('/video', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
-    if (!ytdl.validateURL(url)) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    const info = await ytdl.getInfo(url);
-    const format = ytdl.chooseFormat(info.formats, { quality: 'highest', filter: 'audioandvideo' });
+    // වීඩියෝ එකටත් වෙනම API එකක්
+    const apiRes = await axios.get(`https://api.vreden.my.id/api/ytmp4?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+    
+    if (!apiRes.data?.status || !apiRes.data?.result?.download?.url) {
+      throw new Error('API failed to extract video');
+    }
 
-    res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(info.videoDetails.title)}.mp4"`);
-    res.header('Content-Type', 'video/mp4');
+    const downloadUrl = apiRes.data.result.download.url;
+    const title = apiRes.data.result.metadata?.title || 'video';
 
-    ytdl(url, { format: format }).pipe(res);
+    await streamMedia(downloadUrl, res, `${title}.mp4`, 'video/mp4');
 
   } catch (err) {
-    console.error(err);
+    console.error('[Video API]', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Error fetching video details' });
   }
 });
