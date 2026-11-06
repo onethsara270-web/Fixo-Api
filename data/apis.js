@@ -80,4 +80,17 @@ module.exports = [
     example: `curl -X POST -H "X-API-KEY: sk_your_key" \\\n  -d '{"text":"hello","voice":"en-US-Aria"}' \\\n  https://api.fixo.dev/tts`,
     status: 'coming_soon'
   }
+{
+  slug: 'tiktok',
+  method: 'GET',
+  title: 'TikTok Downloader',
+  tagline: 'No watermark video downloads.',
+  description: 'Download TikTok videos without watermarks directly to your bot. High-speed extraction.',
+  params: [
+    { name: 'url', type: 'string', required: true, example: 'https://vm.tiktok.com/...' }
+  ],
+  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/tiktok?url=https://vm.tiktok.com/..."`,
+  status: 'live' // මේක 'live' කියලා වෙනස් කළා
+    }
+
 ];
