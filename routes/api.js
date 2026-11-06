@@ -1,64 +1,54 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const ytdl = require('@distube/ytdl-core'); // අපේම ක්‍රමය
 const { requireApiKey } = require('../middleware/apiAuth');
 
-// ── 1. YouTube Song (MP3 JSON) ─────
+// ── 1. YouTube Song (MP3 Stream) ─────
 router.get('/song', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
+    if (!ytdl.validateURL(url)) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    // ඩවුන්ලෝඩ් ලින්ක් එක විතරක් ගන්නවා
-    const apiRes = await axios.get(`https://api.vreden.my.id/api/ytmp3?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+    const info = await ytdl.getInfo(url);
+    const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+
+    res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(info.videoDetails.title)}.mp3"`);
+    res.header('Content-Type', 'audio/mpeg');
     
-    if (!apiRes.data?.status || !apiRes.data?.result?.download?.url) {
-      throw new Error('API failed to extract audio');
-    }
-
-    const downloadUrl = apiRes.data.result.download.url;
-    const title = apiRes.data.result.metadata?.title || 'song';
-
-    res.json({
-      success: true,
-      title: title,
-      download_url: downloadUrl
-    });
+    // කෙලින්ම ස්ට්‍රීම් කරනවා
+    ytdl(url, { format: format }).pipe(res);
 
   } catch (err) {
     console.error('[Song API]', err.message);
-    res.status(500).json({ error: 'Error fetching song details' });
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching song details' });
   }
 });
 
-// ── 2. YouTube Video (MP4 JSON) ─────
+// ── 2. YouTube Video (MP4 Stream) ─────
 router.get('/video', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
+    if (!ytdl.validateURL(url)) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    const apiRes = await axios.get(`https://api.vreden.my.id/api/ytmp4?url=${encodeURIComponent(url)}`, { timeout: 15000 });
-    
-    if (!apiRes.data?.status || !apiRes.data?.result?.download?.url) {
-      throw new Error('API failed to extract video');
-    }
+    const info = await ytdl.getInfo(url);
+    const format = ytdl.chooseFormat(info.formats, { quality: 'highest', filter: 'audioandvideo' });
 
-    const downloadUrl = apiRes.data.result.download.url;
-    const title = apiRes.data.result.metadata?.title || 'video';
+    res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(info.videoDetails.title)}.mp4"`);
+    res.header('Content-Type', 'video/mp4');
 
-    res.json({
-      success: true,
-      title: title,
-      download_url: downloadUrl
-    });
+    ytdl(url, { format: format }).pipe(res);
 
   } catch (err) {
     console.error('[Video API]', err.message);
-    res.status(500).json({ error: 'Error fetching video details' });
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching video details' });
   }
 });
 
 // ── 3. TikTok Video Download (JSON) ─────
+// (TikTok එකට අපේම ක්‍රමයක් හදන එක අමාරු නිසා මේක tikwm API එකෙන් තියෙනවා)
 router.get('/tiktok', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
