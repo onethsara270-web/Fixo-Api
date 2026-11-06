@@ -2,11 +2,14 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
-const { MongoStore } = require('connect-mongo');
+const MongoStore = require('connect-mongo');
 const passport = require('passport');
 const path = require('path');
 
 const app = express();
+
+// ── Trust Proxy (Render/Heroku සඳහා අත්‍යවශ්‍යයි) ──────
+app.set('trust proxy', 1);
 
 // ── Database ──────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI)
@@ -25,14 +28,17 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || 'fixo_super_secret_key_12345',
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
+  store: MongoStore.create({ 
+    mongoUrl: process.env.MONGO_URI,
+    ttl: 14 * 24 * 60 * 60 // 14 days
+  }),
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production', // Production (Render) වලදී true වේ
     sameSite: 'lax'
   }
 }));
@@ -61,5 +67,5 @@ app.use((req, res) => {
 // ── Start ─────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✓ fixo api running at ${process.env.BASE_URL}`);
+  console.log(`✓ fixo api running at ${process.env.BASE_URL || 'http://localhost:' + PORT}`);
 });
