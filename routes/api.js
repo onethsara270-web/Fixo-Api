@@ -112,17 +112,36 @@ router.get('/instagram', requireApiKey, async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide an Instagram URL' });
 
-    // yt-dlp එකෙන් කෙලින්ම වීඩියෝ එක ස්ට්‍රීම් කරනවා
-    const subprocess = youtubedl.exec(url, {
-      output: '-',
-      noWarnings: true,
-      noCallHome: true,
-    });
+    let videoUrl = null;
 
+    // API 1: Vreden
+    try {
+      const { data } = await axios.get(`https://api.vreden.my.id/api/ig?url=${encodeURIComponent(url)}`, { timeout: 10000 });
+      if (data?.status && data?.result) {
+        const resultData = Array.isArray(data.result) ? data.result[0] : data.result;
+        videoUrl = resultData.url || resultData.video_url;
+      }
+    } catch (e) { console.error('IG API 1 Failed'); }
+
+    // API 2: Siputzx (Fallback)
+    if (!videoUrl) {
+      try {
+        const { data } = await axios.get(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(url)}`, { timeout: 10000 });
+        if (data?.status && data?.data?.length > 0) {
+          videoUrl = data.data[0].url;
+        }
+      } catch (e) { console.error('IG API 2 Failed'); }
+    }
+
+    if (!videoUrl) {
+      return res.status(404).json({ error: 'Could not extract video. Post might be private.' });
+    }
+
+    // ස්ට්‍රීම් කරනවා
+    const videoRes = await axios({ method: 'get', url: videoUrl, responseType: 'stream' });
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="instagram.mp4"');
-    
-    subprocess.stdout.pipe(res);
+    videoRes.data.pipe(res);
 
   } catch (err) {
     console.error('[Instagram API Error]', err.message);
