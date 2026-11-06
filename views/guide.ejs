@@ -1,0 +1,62 @@
+<%- include('partials/head', { title: 'Integration Guide' }) %>
+<%- include('partials/nav') %>
+
+<section class="docs-page" style="padding-top: 120px;">
+  <div class="container" style="max-width: 800px;">
+    <div class="eyebrow">documentation</div>
+    <h1>How to integrate with your Bot</h1>
+    <p class="section-lead">Learn how to take your fixo api key and use it inside your WhatsApp bot code.</p>
+
+    <div class="api-detail-section glass" style="padding: 32px; border-radius: 16px; margin-bottom: 32px;">
+      <h2>Step 1: Get your API Key</h2>
+      <p class="muted" style="margin-bottom: 16px;">Go to your <a href="/dashboard" style="color: var(--accent);">Dashboard</a> and click <strong>"+ Generate Key"</strong>. Copy the key that starts with <code>fixo_...</code>.</p>
+      
+      <h2 style="margin-top: 32px;">Step 2: Add it to your Bot</h2>
+      <p class="muted" style="margin-bottom: 16px;">You can pass the key to our API in two ways. The easiest way for beginners is to append it as a query parameter in the URL.</p>
+      
+      <div class="code-block" style="margin-bottom: 24px;">
+        <span style="color: #8a8a99;">// Example API URL</span><br>
+        <span style="color: #a5f3fc;">https://fixo-api-p15j.onrender.com/api/tiktok?url=</span><span style="color: #c4b5fd;">YOUR_TIKTOK_LINK</span><span style="color: #a5f3fc;">&api_key=</span><span style="color: #8b5cf6;">fixo_your_key_here</span>
+      </div>
+
+      <p class="muted" style="margin-bottom: 16px;">Or, if you are using Axios or Fetch, you can pass it securely in the Headers:</p>
+      
+      <div class="code-block">
+        <span style="color: #8a8a99;">// Header method (More Secure)</span><br>
+        headers: {<br>
+        &nbsp;&nbsp;<span style="color: #a5f3fc;">'X-API-KEY'</span>: <span style="color: #8b5cf6;">'fixo_your_key_here'</span><br>
+        }
+      </div>
+    </div>
+
+    <div class="api-detail-section glass" style="padding: 32px; border-radius: 16px;">
+      <h2>Step 3: Code Example (WhatsApp Bot)</h2>
+      <p class="muted" style="margin-bottom: 16px;">Here is how you can use the TikTok downloader inside your Node.js WhatsApp bot (like Baileys).</p>
+      
+      <div class="code-block">
+<span style="color: #c4b5fd;">const</span> axios = <span style="color: #c4b5fd;">require</span>(<span style="color: #a5f3fc;">'axios'</span>);<br><br>
+<span style="color: #c4b5fd;">async function</span> sendTikTok(sock, from, tiktokUrl) {<br>
+&nbsp;&nbsp;<span style="color: #c4b5fd;">try</span> {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #8a8a99;">// 1. Request our API</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #c4b5fd;">const</span> res = <span style="color: #c4b5fd;">await</span> axios.get(<span style="color: #a5f3fc;">`https://fixo-api-p15j.onrender.com/api/tiktok?url=${tiktokUrl}&api_key=fixo_YOUR_KEY`</span>);<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #c4b5fd;">if</span> (!res.data.success) <span style="color: #c4b5fd;">throw new</span> Error(<span style="color: #a5f3fc;">"Failed"</span>);<br><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #8a8a99;">// 2. Download the video using the URL we got</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #c4b5fd;">const</span> videoRes = <span style="color: #c4b5fd;">await</span> axios.get(res.data.video_url, { responseType: <span style="color: #a5f3fc;">'arraybuffer'</span> });<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #c4b5fd;">const</span> buffer = Buffer.from(videoRes.data, <span style="color: #a5f3fc;">'binary'</span>);<br><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #8a8a99;">// 3. Send to WhatsApp</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #c4b5fd;">await</span> sock.sendMessage(from, {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;video: buffer,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;caption: <span style="color: #a5f3fc;">`✅ ${res.data.title}\n👤 ${res.data.author}`</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;});<br><br>
+&nbsp;&nbsp;} <span style="color: #c4b5fd;">catch</span> (err) {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;sock.sendMessage(from, { text: <span style="color: #a5f3fc;">"Error downloading video."</span> });<br>
+&nbsp;&nbsp;}<br>
+}
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<%- include('partials/foot') %>
