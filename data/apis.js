@@ -83,7 +83,7 @@ module.exports = [
     ],
     example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -d '{"text":"hello"}' \\\n  https://api.fixo.dev/tts`,
     status: 'coming_soon'
-  }
+  },
 {
   slug: 'instagram',
   method: 'GET',
@@ -95,5 +95,5 @@ module.exports = [
   ],
   example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/instagram?url=https://www.instagram.com/reel/..."`,
   status: 'live'
-},
+}
 ];
