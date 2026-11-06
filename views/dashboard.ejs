@@ -16,7 +16,7 @@
     <div class="dash-section">
       <div class="dash-section-head">
         <h2>API Keys</h2>
-        <button class="btn btn-primary" onclick="generateNewKey()">+ Generate Key</button>
+        <button class="btn btn-primary" onclick="openLabelModal()">+ Generate Key</button>
       </div>
 
       <% if (keys.length === 0) { %>
@@ -66,7 +66,24 @@
   </div>
 </section>
 
-<!-- NEW KEY MODAL (Popup එක වෙනුවට එන ලස්සන බොක්ස් එක) -->
+<!-- MODAL 1: LABEL INPUT (අලුතෙන් හදපු ලේබල් එක ගන්න එක) -->
+<div id="labelModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); align-items:center; justify-content:center; padding:20px;">
+  <div class="glass" style="max-width:400px; width:100%; padding:32px; border-radius:16px; border:1px solid rgba(139, 92, 246, 0.3);">
+    <h2 style="color:#f4f4f7; margin-bottom:8px; font-size:1.2rem;">New API Key</h2>
+    <p class="muted" style="margin-bottom:20px; font-size:0.9rem;">Give this key a name to remember it by.</p>
+    
+    <input type="text" id="keyLabelInput" placeholder="e.g. Production Bot" 
+           style="width:100%; background:rgba(0,0,0,0.5); border:1px solid #30363d; color:#fff; padding:12px; border-radius:8px; margin-bottom:24px; font-family:inherit; font-size:0.95rem; outline:none;" 
+           onkeypress="if(event.key === 'Enter') submitNewKey()">
+
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button class="btn btn-ghost" onclick="closeLabelModal()">Cancel</button>
+      <button class="btn btn-primary" id="createKeyBtn" onclick="submitNewKey()">Create Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL 2: SUCCESS (Key එක පෙන්නන එක) -->
 <div id="keyModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); align-items:center; justify-content:center; padding:20px;">
   <div class="glass" style="max-width:500px; width:100%; padding:40px; border-radius:16px; text-align:center; position:relative; border:1px solid rgba(139, 92, 246, 0.3);">
     <h2 style="color:#8b5cf6; margin-bottom:10px;">Success!</h2>
@@ -78,18 +95,31 @@
 
     <div style="display:flex; gap:10px; justify-content:center;">
       <button class="btn btn-primary" onclick="copyNewKey(this)">Copy Key</button>
-      <button class="btn btn-ghost" onclick="closeModal()">Done</button>
+      <button class="btn btn-ghost" onclick="closeSuccessModal()">Done</button>
     </div>
   </div>
 </div>
 
 <script>
-async function generateNewKey() {
-  const label = prompt('Key label (e.g. "Production bot"):', 'Default');
-  if (!label) return;
+// Modal එක අරිනවා
+function openLabelModal() {
+  document.getElementById('keyLabelInput').value = 'Default';
+  document.getElementById('labelModal').style.display = 'flex';
+  document.getElementById('keyLabelInput').focus();
+}
+
+// Modal එක වහනවා
+function closeLabelModal() {
+  document.getElementById('labelModal').style.display = 'none';
+}
+
+// Key එක හදන ප්‍රධාන ෆන්ක්ෂන් එක
+async function submitNewKey() {
+  const labelInput = document.getElementById('keyLabelInput').value.trim();
+  const label = labelInput || 'Default';
   
-  const btn = event.target;
-  btn.textContent = 'Generating...';
+  const btn = document.getElementById('createKeyBtn');
+  btn.textContent = 'Creating...';
   btn.disabled = true;
 
   try {
@@ -102,6 +132,7 @@ async function generateNewKey() {
     const data = await r.json();
     
     if (data.success) {
+      closeLabelModal();
       document.getElementById('newKeyText').textContent = data.key.key;
       document.getElementById('keyModal').style.display = 'flex';
       document.getElementById('emptyState').style.display = 'none';
@@ -111,11 +142,12 @@ async function generateNewKey() {
   } catch (err) {
     alert('Error creating key. Please try again.');
   } finally {
-    btn.textContent = '+ Generate Key';
+    btn.textContent = 'Create Key';
     btn.disabled = false;
   }
 }
 
+// Key එක කොපි කරනවා
 function copyNewKey(btn) {
   const text = document.getElementById('newKeyText').textContent;
   navigator.clipboard.writeText(text);
@@ -124,9 +156,10 @@ function copyNewKey(btn) {
   setTimeout(() => btn.textContent = old, 1500);
 }
 
-function closeModal() {
+// Success Modal එක වහලා රීලෝඩ් වෙනවා
+function closeSuccessModal() {
   document.getElementById('keyModal').style.display = 'none';
-  location.reload(); // අලුත් key එක ලිස්ට් එකේ පෙන්නන්න පේජ් එක රීලෝඩ් වෙනවා
+  location.reload();
 }
 
 async function revokeKey(id) {
