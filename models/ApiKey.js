@@ -11,8 +11,9 @@ const apiKeySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// මෙතන තමයි fixo_ කෑල්ල දාලා තියෙන්නේ
 apiKeySchema.statics.generate = function () {
-  return 'sk_' + crypto.randomBytes(24).toString('hex');
+  return 'fixo_' + crypto.randomBytes(24).toString('hex');
 };
 
 module.exports = mongoose.model('ApiKey', apiKeySchema);
