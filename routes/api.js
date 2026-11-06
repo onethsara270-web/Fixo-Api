@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios'); // මේක අනිවාර්යයෙන් ඕන
 const { requireApiKey } = require('../middleware/apiAuth');
-const tiktok = require('@tobyg74/tiktok-api-dl');
 
 // ── 1. YouTube Song Download ─────
 router.get('/song', requireApiKey, async (req, res) => {
@@ -25,34 +25,45 @@ router.get('/song', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 2. TikTok Video Download (Reliable Package) ─────
+// ── 2. TikTok Video Download (Fixo Guaranteed) ─────
 router.get('/tiktok', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a TikTok URL' });
 
-    // TikTok එකෙන් ඩේටා ගන්නවා
-    const result = await tiktok.Downloader(url, { version: 'v1' });
+    // Browser එකකින් එනවා වගේ පෙන්නන්න User-Agent එකක් යවනවා
+    const config = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      },
+      timeout: 15000
+    };
 
-    if (result.status !== 'success') {
-      return res.status(404).json({ error: 'Failed to extract TikTok video. Link might be invalid.' });
+    // tikwm API එකට රික්වෙස්ට් එක යවනවා
+    const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, config);
+    const result = apiRes.data;
+
+    // ඩේටා ආවේ නැත්නම් Error එකක් යවනවා
+    if (result.code !== 0 || !result.data) {
+      return res.status(404).json({ error: 'TikTok video not found or private.' });
     }
 
-    const data = result.result;
+    const data = result.data;
 
-    // WhatsApp Bot එකට ඕන කරන විදියට JSON එක හදනවා
+    // Bot එකට ඕන කරන විදියට JSON එක හදනවා
     res.json({
       success: true,
-      title: data.description || 'TikTok Video',
+      title: data.title || 'TikTok Video',
       author: data.author?.nickname || 'Unknown',
-      video_url: data.video?.playAddr[0] || null,
-      music_url: data.music?.playUrl[0] || null,
-      thumbnail: data.video?.cover[0] || null
+      video_url: data.play, // කෙලින්ම playable link එක
+      music_url: data.music_info?.play || null,
+      thumbnail: data.cover || null
     });
 
   } catch (err) {
-    console.error('TikTok API Error:', err);
-    res.status(500).json({ error: 'Server error while fetching TikTok video' });
+    console.error('TikTok API Error:', err.message);
+    res.status(500).json({ error: 'Server error while fetching TikTok video. Try again.' });
   }
 });
 
