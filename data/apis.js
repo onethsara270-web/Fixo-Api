@@ -84,4 +84,16 @@ module.exports = [
     example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -d '{"text":"hello"}' \\\n  https://api.fixo.dev/tts`,
     status: 'coming_soon'
   }
+{
+  slug: 'instagram',
+  method: 'GET',
+  title: 'Instagram Downloader',
+  tagline: 'Download Reels and Videos.',
+  description: 'Download Instagram Reels, videos, and IGTV posts directly to your bot without watermarks.',
+  params: [
+    { name: 'url', type: 'string', required: true, example: 'https://www.instagram.com/reel/...' }
+  ],
+  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/instagram?url=https://www.instagram.com/reel/..."`,
+  status: 'live'
+},
 ];
