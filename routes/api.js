@@ -1,27 +1,35 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const ytdl = require('@distube/ytdl-core'); // අපේම ක්‍රමය
+const { Innertube } = require('youtubei.js'); // අලුත් ලයිබ්‍රරි එක
 const { requireApiKey } = require('../middleware/apiAuth');
+const { Readable } = require('stream');
 
 // ── 1. YouTube Song (MP3 Stream) ─────
 router.get('/song', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
-    if (!ytdl.validateURL(url)) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    const info = await ytdl.getInfo(url);
-    const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+    // URL එකෙන් Video ID එක විතරක් ගන්නවා
+    const videoId = url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i)?.[1];
+    if (!videoId) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(info.videoDetails.title)}.mp3"`);
-    res.header('Content-Type', 'audio/mpeg');
+    const youtube = await Innertube.create();
     
-    // කෙලින්ම ස්ට්‍රීම් කරනවා
-    ytdl(url, { format: format }).pipe(res);
+    // YouTube App එකෙන් වගේ ඩවුන්ලෝඩ් ලින්ක් එක ගන්නවා
+    const stream = await youtube.download(videoId, {
+      type: 'audio',
+      quality: 'best',
+      format: 'mp4' // Audio එකට mp4 (m4a) පාවිච්චි කරනවා
+    });
+
+    res.header('Content-Type', 'audio/mp4');
+    // Node.js stream එකකට හරවලා ස්ට්‍රීම් කරනවා
+    Readable.fromWeb(stream).pipe(res);
 
   } catch (err) {
-    console.error('[Song API]', err.message);
+    console.error('[Song API Error]', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Error fetching song details' });
   }
 });
@@ -31,24 +39,28 @@ router.get('/video', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
-    if (!ytdl.validateURL(url)) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    const info = await ytdl.getInfo(url);
-    const format = ytdl.chooseFormat(info.formats, { quality: 'highest', filter: 'audioandvideo' });
+    const videoId = url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i)?.[1];
+    if (!videoId) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(info.videoDetails.title)}.mp4"`);
+    const youtube = await Innertube.create();
+    
+    const stream = await youtube.download(videoId, {
+      type: 'video+audio',
+      quality: 'best',
+      format: 'mp4'
+    });
+
     res.header('Content-Type', 'video/mp4');
-
-    ytdl(url, { format: format }).pipe(res);
+    Readable.fromWeb(stream).pipe(res);
 
   } catch (err) {
-    console.error('[Video API]', err.message);
+    console.error('[Video API Error]', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Error fetching video details' });
   }
 });
 
-// ── 3. TikTok Video Download (JSON) ─────
-// (TikTok එකට අපේම ක්‍රමයක් හදන එක අමාරු නිසා මේක tikwm API එකෙන් තියෙනවා)
+// ── 3. TikTok Video Download ─────
 router.get('/tiktok', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
