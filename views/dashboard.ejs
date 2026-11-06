@@ -16,35 +16,39 @@
     <div class="dash-section">
       <div class="dash-section-head">
         <h2>API Keys</h2>
-        <button class="btn btn-primary" onclick="createKey()">+ Generate Key</button>
+        <button class="btn btn-primary" onclick="generateNewKey()">+ Generate Key</button>
       </div>
 
       <% if (keys.length === 0) { %>
-        <div class="empty-state glass">
+        <div class="empty-state glass" id="emptyState">
           <p>No keys yet. Generate one to start integrating.</p>
         </div>
       <% } else { %>
-        <div class="keys-list">
-          <% keys.forEach(k => { %>
-            <div class="key-row glass">
-              <div>
-                <div class="key-label"><%= k.label %></div>
-                <code class="key-value" data-key="<%= k.key %>"><%= k.key.slice(0, 12) %>••••••••<%= k.key.slice(-4) %></code>
-              </div>
-              <div class="key-meta">
-                <span class="badge <%= k.active ? 'ok' : 'revoked' %>"><%= k.active ? 'active' : 'revoked' %></span>
-                <span class="key-date"><%= new Date(k.createdAt).toLocaleDateString() %></span>
-              </div>
-              <div class="key-actions">
-                <% if (k.active) { %>
-                  <button class="btn btn-sm" onclick="copyKey(this, '<%= k.key %>')">Copy</button>
-                  <button class="btn btn-sm btn-danger" onclick="revokeKey('<%= k._id %>')">Revoke</button>
-                <% } %>
-              </div>
-            </div>
-          <% }) %>
+        <div class="empty-state glass" id="emptyState" style="display:none;">
+          <p>No keys yet. Generate one to start integrating.</p>
         </div>
       <% } %>
+
+      <div class="keys-list" id="keysList">
+        <% keys.forEach(k => { %>
+          <div class="key-row glass">
+            <div>
+              <div class="key-label"><%= k.label %></div>
+              <code class="key-value" data-key="<%= k.key %>"><%= k.key.slice(0, 10) %>••••••••<%= k.key.slice(-4) %></code>
+            </div>
+            <div class="key-meta">
+              <span class="badge <%= k.active ? 'ok' : 'revoked' %>"><%= k.active ? 'active' : 'revoked' %></span>
+              <span class="key-date"><%= new Date(k.createdAt).toLocaleDateString() %></span>
+            </div>
+            <div class="key-actions">
+              <% if (k.active) { %>
+                <button class="btn btn-sm" onclick="copyKey(this, '<%= k.key %>')">Copy</button>
+                <button class="btn btn-sm btn-danger" onclick="revokeKey('<%= k._id %>')">Revoke</button>
+              <% } %>
+            </div>
+          </div>
+        <% }) %>
+      </div>
     </div>
 
     <div class="dash-section">
@@ -62,20 +66,67 @@
   </div>
 </section>
 
+<!-- NEW KEY MODAL (Popup එක වෙනුවට එන ලස්සන බොක්ස් එක) -->
+<div id="keyModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); align-items:center; justify-content:center; padding:20px;">
+  <div class="glass" style="max-width:500px; width:100%; padding:40px; border-radius:16px; text-align:center; position:relative; border:1px solid rgba(139, 92, 246, 0.3);">
+    <h2 style="color:#8b5cf6; margin-bottom:10px;">Success!</h2>
+    <p class="muted" style="margin-bottom:20px;">Here is your new API key. Copy it now, you won't see it again.</p>
+    
+    <div style="background:rgba(0,0,0,0.5); padding:15px; border-radius:8px; border:1px solid #30363d; margin-bottom:24px; position:relative;">
+      <code id="newKeyText" style="font-family:'JetBrains Mono',monospace; font-size:14px; color:#c4b5fd; word-break:break-all;"></code>
+    </div>
+
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button class="btn btn-primary" onclick="copyNewKey(this)">Copy Key</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Done</button>
+    </div>
+  </div>
+</div>
+
 <script>
-async function createKey() {
+async function generateNewKey() {
   const label = prompt('Key label (e.g. "Production bot"):', 'Default');
   if (!label) return;
-  const r = await fetch('/api/keys', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label })
-  });
-  const data = await r.json();
-  if (data.success) {
-    alert('Your new key:\n\n' + data.key.key + '\n\nSave it now — you won\'t see it again.');
-    location.reload();
+  
+  const btn = event.target;
+  btn.textContent = 'Generating...';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch('/api/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label })
+    });
+    
+    const data = await r.json();
+    
+    if (data.success) {
+      document.getElementById('newKeyText').textContent = data.key.key;
+      document.getElementById('keyModal').style.display = 'flex';
+      document.getElementById('emptyState').style.display = 'none';
+    } else {
+      alert('Something went wrong!');
+    }
+  } catch (err) {
+    alert('Error creating key. Please try again.');
+  } finally {
+    btn.textContent = '+ Generate Key';
+    btn.disabled = false;
   }
+}
+
+function copyNewKey(btn) {
+  const text = document.getElementById('newKeyText').textContent;
+  navigator.clipboard.writeText(text);
+  const old = btn.textContent;
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = old, 1500);
+}
+
+function closeModal() {
+  document.getElementById('keyModal').style.display = 'none';
+  location.reload(); // අලුත් key එක ලිස්ට් එකේ පෙන්නන්න පේජ් එක රීලෝඩ් වෙනවා
 }
 
 async function revokeKey(id) {
