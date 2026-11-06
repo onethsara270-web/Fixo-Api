@@ -1,84 +1,51 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const youtubedl = require('youtube-dl-exec'); // අලුත් ටූල් එක
 const { requireApiKey } = require('../middleware/apiAuth');
 
-// ── Helper: Try Multiple APIs for YouTube ─────
-async function getYouTubeLink(url, type = 'mp3') {
-  const apis = type === 'mp3' ? [
-    `https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(url)}`,
-    `https://api.vreden.my.id/api/ytmp3?url=${encodeURIComponent(url)}`,
-    `https://api.vevioz.com/api/button/mp3/${encodeURIComponent(url)}`,
-    `https://api.alyachan.pro/api/ytmp3?url=${encodeURIComponent(url)}&apikey=G7I6X7`
-  ] : [
-    `https://api.siputzx.my.id/api/d/ytmp4?url=${encodeURIComponent(url)}`,
-    `https://api.vreden.my.id/api/ytmp4?url=${encodeURIComponent(url)}`,
-    `https://api.vevioz.com/api/button/mp4/${encodeURIComponent(url)}`,
-    `https://api.alyachan.pro/api/ytmp4?url=${encodeURIComponent(url)}&apikey=G7I6X7`
-  ];
-
-  for (const api of apis) {
-    try {
-      const { data } = await axios.get(api, {
-        timeout: 15000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-      });
-
-      // Siputzx format
-      if (data?.status && data?.data?.url) {
-        return { download_url: data.data.url, title: data.data.title };
-      }
-      // Vreden format
-      if (data?.status && data?.result?.download?.url) {
-        return { download_url: data.result.download.url, title: data.result.metadata?.title };
-      }
-      // Alya format
-      if (data?.status && data?.data?.url) {
-        return { download_url: data.data.url, title: data.data.title };
-      }
-      // Vevioz format
-      if (data?.success && data?.download_url) {
-         return { download_url: data.download_url, title: data.title };
-      }
-      // Direct URL return
-      if (data?.url) {
-        return { download_url: data.url, title: 'YouTube Media' };
-      }
-    } catch (e) {
-      console.error(`[${type} API Error] ${api.split('?')[0]} - ${e.message}`);
-      continue; // Fail වුනොත් ඊළඟ එකට යනවා
-    }
-  }
-  throw new Error('All APIs failed to extract link');
-}
-
-// ── 1. YouTube Song (MP3 JSON) ─────
+// ── 1. YouTube Song (MP3 Stream) ─────
 router.get('/song', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
 
-    const result = await getYouTubeLink(url, 'mp3');
-    res.json({ success: true, title: result.title || 'song', download_url: result.download_url });
+    // අපේ සර්වර් එකෙන් කෙලින්ම YouTube එකට කනෙක්ට් වෙනවා yt-dlp හරහා
+    const subprocess = youtubedl.exec(url, {
+      format: 'bestaudio',
+      output: '-', // කෙලින්ම ස්ට්‍රීම් කරන්න
+    });
+
+    res.header('Content-Type', 'audio/mpeg');
+    res.header('Content-Disposition', 'attachment; filename="audio.mp3"');
+    
+    subprocess.stdout.pipe(res);
 
   } catch (err) {
-    console.error('[Song API]', err.message);
-    res.status(500).json({ error: 'Error fetching song details' });
+    console.error('[Song API Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching song details' });
   }
 });
 
-// ── 2. YouTube Video (MP4 JSON) ─────
+// ── 2. YouTube Video (MP4 Stream) ─────
 router.get('/video', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
 
-    const result = await getYouTubeLink(url, 'mp4');
-    res.json({ success: true, title: result.title || 'video', download_url: result.download_url });
+    const subprocess = youtubedl.exec(url, {
+      format: 'best[ext=mp4]', // හොඳම mp4 වීඩියෝ එක
+      output: '-',
+    });
+
+    res.header('Content-Type', 'video/mp4');
+    res.header('Content-Disposition', 'attachment; filename="video.mp4"');
+
+    subprocess.stdout.pipe(res);
 
   } catch (err) {
-    console.error('[Video API]', err.message);
-    res.status(500).json({ error: 'Error fetching video details' });
+    console.error('[Video API Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching video details' });
   }
 });
 
