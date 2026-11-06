@@ -1,6 +1,8 @@
 <nav id="nav">
   <div class="container nav-inner">
     <a href="/" class="brand"><span class="dot"></span> fixo api</a>
+    
+    <!-- Desktop Menu -->
     <ul class="nav-links">
       <li><a href="/docs">Docs</a></li>
       <li><a href="/#features">Features</a></li>
@@ -17,6 +19,33 @@
       <% } else { %>
         <li><a href="/login">Sign in</a></li>
         <li><a href="/register" class="nav-cta">Get Started</a></li>
+      <% } %>
+    </ul>
+
+    <!-- Mobile Hamburger Icon -->
+    <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+
+  <!-- Mobile Dropdown Menu -->
+  <div class="mobile-menu" id="mobileMenu">
+    <ul>
+      <li><a href="/docs">Docs</a></li>
+      <li><a href="/#features">Features</a></li>
+      <% if (user) { %>
+        <li><a href="/dashboard">Dashboard</a></li>
+        <% if (user.role === 'admin') { %>
+          <li><a href="/admin" style="color:#8b5cf6">Admin</a></li>
+        <% } %>
+        <li>
+          <form action="/auth/logout" method="POST">
+            <button class="nav-cta" type="submit" style="width:100%;">Sign out</button>
+          </form>
+        </li>
+      <% } else { %>
+        <li><a href="/login">Sign in</a></li>
+        <li><a href="/register" class="nav-cta" style="display:block; text-align:center;">Get Started</a></li>
       <% } %>
     </ul>
   </div>
