@@ -37,4 +37,9 @@ router.get('/dashboard', requireAuth, async (req, res) => {
   res.render('dashboard', { keys, apis });
 });
 
+// ── Guide Page ────────────────────────────────────
+router.get('/guide', (req, res) => {
+  res.render('guide');
+});
+
 module.exports = router;
