@@ -55,9 +55,12 @@ app.use((req, res, next) => {
 
 // ── Routes ────────────────────────────────────────
 app.use('/auth', require('./routes/auth'));
-app.use('/', require('./routes/pages'));
+app.use('/api', require('./routes/api')); // ⬅️ මේක තමයි අමතක වෙලා තිබ්බේ!
 app.use('/api/keys', require('./routes/keys'));
 app.use('/admin', require('./routes/admin'));
+
+// ⚠️ pages එක හැමවෙලේම අන්තිමට තියෙන්න ඕන (මොකද ඒකේ '/' තියෙන නිසා)
+app.use('/', require('./routes/pages'));
 
 // ── 404 ───────────────────────────────────────────
 app.use((req, res) => {
