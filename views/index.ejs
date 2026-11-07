@@ -30,10 +30,22 @@
 <section class="stats">
   <div class="container">
     <div class="stats-grid">
-      <div class="stat"><div class="stat-num" data-count="42">0</div><div class="stat-label">Endpoints</div></div>
-      <div class="stat"><div class="stat-num" data-count="99" data-suffix=".9%">0</div><div class="stat-label">Uptime</div></div>
-      <div class="stat"><div class="stat-num" data-count="180" data-suffix="ms">0</div><div class="stat-label">Latency</div></div>
-      <div class="stat"><div class="stat-num" data-count="12" data-suffix="k+">0</div><div class="stat-label">Developers</div></div>
+      <div class="stat">
+        <div class="stat-num" data-count="<%= stats.endpoints %>">0</div>
+        <div class="stat-label">Live Endpoints</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" data-count="<%= stats.uptime %>" data-suffix="%">0</div>
+        <div class="stat-label">Uptime</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" data-count="<%= stats.users %>" data-suffix="+">0</div>
+        <div class="stat-label">Developers</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" data-count="<%= stats.requests %>">0</div>
+        <div class="stat-label">Total API Requests</div>
+      </div>
     </div>
   </div>
 </section>
@@ -51,6 +63,7 @@
           </div>
           <h3><%= api.title %></h3>
           <p><%= api.tagline %></p>
+          <span class="badge <%= api.status === 'live' ? 'ok' : '' %>"><%= api.status === 'live' ? 'LIVE' : 'COMING SOON' %></span>
         </a>
       <% }) %>
     </div>
@@ -59,7 +72,7 @@
 
 <section>
   <div class="container">
-    <div class="cta-box glass">
+    <div class="cta-box glass reveal">
       <h2>Ready to build?</h2>
       <p>Get your API key in under 30 seconds.</p>
       <a href="/register" class="btn btn-primary">Create Free Account →</a>
