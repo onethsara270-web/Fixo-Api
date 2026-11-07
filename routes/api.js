@@ -13,7 +13,6 @@ function getCookieFile() {
     fs.writeFileSync(filePath, process.env.YOUTUBE_COOKIES);
     return filePath;
   } catch (err) {
-    console.error('Error writing cookies file:', err.message);
     return null;
   }
 }
@@ -26,23 +25,16 @@ router.get('/song', requireApiKey, async (req, res) => {
 
     const cookieFile = getCookieFile();
     const options = {
-      format: 'bestaudio',
-      output: '-',
-      noWarnings: true,
-      noCallHome: true,
-      noCheckCertificate: true,
-      youtubeSkipDashManifest: true,
-      jsRuntimes: 'node',
+      format: 'bestaudio', output: '-', noWarnings: true, noCallHome: true,
+      noCheckCertificate: true, youtubeSkipDashManifest: true, jsRuntimes: 'node',
     };
     if (cookieFile) options.cookies = cookieFile;
 
     const subprocess = youtubedl.exec(url, options);
-    
     res.header('Content-Type', 'audio/mpeg');
     res.header('Content-Disposition', 'attachment; filename="audio.mp3"');
     subprocess.stdout.pipe(res);
   } catch (err) {
-    console.error('[Song API Error]', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Error fetching song details' });
   }
 });
@@ -55,23 +47,16 @@ router.get('/video', requireApiKey, async (req, res) => {
 
     const cookieFile = getCookieFile();
     const options = {
-      format: 'best[ext=mp4]',
-      output: '-',
-      noWarnings: true,
-      noCallHome: true,
-      noCheckCertificate: true,
-      youtubeSkipDashManifest: true,
-      jsRuntimes: 'node',
+      format: 'best[ext=mp4]', output: '-', noWarnings: true, noCallHome: true,
+      noCheckCertificate: true, youtubeSkipDashManifest: true, jsRuntimes: 'node',
     };
     if (cookieFile) options.cookies = cookieFile;
 
     const subprocess = youtubedl.exec(url, options);
-
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="video.mp4"');
     subprocess.stdout.pipe(res);
   } catch (err) {
-    console.error('[Video API Error]', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Error fetching video details' });
   }
 });
@@ -86,51 +71,67 @@ router.get('/tiktok', requireApiKey, async (req, res) => {
     const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, config);
     const result = apiRes.data;
 
-    if (result.code !== 0 || !result.data) {
-      return res.status(404).json({ error: 'TikTok video not found or private.' });
-    }
+    if (result.code !== 0 || !result.data) return res.status(404).json({ error: 'TikTok video not found.' });
 
-    const data = result.data;
     res.json({
       success: true,
-      title: data.title || 'TikTok Video',
-      author: data.author?.nickname || 'Unknown',
-      video_url: data.play,
-      music_url: data.music_info?.play || null,
-      thumbnail: data.cover || null
+      title: result.data.title || 'TikTok Video',
+      author: result.data.author?.nickname || 'Unknown',
+      video_url: result.data.play
     });
-
   } catch (err) {
-    console.error('TikTok API Error:', err.message);
     res.status(500).json({ error: 'Server error while fetching TikTok video.' });
   }
 });
 
-// ── 4. Instagram Video Downloader (Stream) ─────
+// ── 4. Instagram Video Downloader (JSON Link) ─────
 router.get('/instagram', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide an Instagram URL' });
 
-    // yt-dlp එකෙන් කෙලින්ම වීඩියෝ එක ස්ට්‍රීම් කරනවා (Headers එක්ක)
-    const subprocess = youtubedl.exec(url, {
-      output: '-',
-      noWarnings: true,
-      noCallHome: true,
-      addHeader: [
-        'referer:instagram.com',
-        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      ]
+    let directUrl = null;
+
+    // API 1: Vreden
+    try {
+      const { data } = await axios.get(`https://api.vreden.my.id/api/ig?url=${encodeURIComponent(url)}`, { timeout: 10000 });
+      if (data?.status && data?.result) {
+        const resultData = Array.isArray(data.result) ? data.result[0] : data.result;
+        directUrl = resultData.url || resultData.video_url;
+      }
+    } catch (e) {}
+
+    // API 2: Siputzx (Fallback)
+    if (!directUrl) {
+      try {
+        const { data } = await axios.get(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(url)}`, { timeout: 10000 });
+        if (data?.status && data?.data?.length > 0) {
+          directUrl = data.data[0].url;
+        }
+      } catch (e) {}
+    }
+
+    // API 3: Alyachan (Fallback)
+    if (!directUrl) {
+      try {
+        const { data } = await axios.get(`https://api.alyachan.pro/api/ig?url=${encodeURIComponent(url)}&apikey=G7I6X7`, { timeout: 10000 });
+        if (data?.status && data?.data?.url) {
+          directUrl = data.data.url;
+        }
+      } catch (e) {}
+    }
+
+    if (!directUrl) {
+      return res.status(404).json({ error: 'Could not extract video. Post might be private.' });
+    }
+
+    res.json({
+      success: true,
+      video_url: directUrl
     });
 
-    res.header('Content-Type', 'video/mp4');
-    res.header('Content-Disposition', 'attachment; filename="instagram.mp4"');
-    
-    subprocess.stdout.pipe(res);
-
   } catch (err) {
-    console.error('[Instagram API Error]', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Error fetching Instagram video' });
+    res.status(500).json({ error: 'Server error while fetching Instagram video.' });
   }
 });
 
