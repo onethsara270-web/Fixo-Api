@@ -107,5 +107,17 @@ module.exports = [
     ],
     example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -d '{"text":"hello"}' \\\n  https://api.fixo.dev/tts`,
     status: 'coming_soon'
-  }
+  },
+  {
+  slug: 'pinterest',
+  method: 'GET',
+  title: 'Pinterest Downloader',
+  tagline: 'Download Pinterest videos and ideas.',
+  description: 'Download Pinterest video pins securely using your own cookies.',
+  params: [
+    { name: 'url', type: 'string', required: true, example: 'https://www.pinterest.com/pin/...' }
+  ],
+  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/pinterest?url=https://www.pinterest.com/pin/..."`,
+  status: 'live'
+}
 ];
