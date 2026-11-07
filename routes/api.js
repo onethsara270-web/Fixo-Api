@@ -84,54 +84,50 @@ router.get('/tiktok', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 4. Instagram Video Downloader (JSON Link) ─────
+// ── 4. Instagram Video Downloader (Direct Scraping) ─────
 router.get('/instagram', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide an Instagram URL' });
 
-    let directUrl = null;
+    // කෙලින්ම Instagram එකට රික්වෙස්ට් එක යවනවා
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      timeout: 15000
+    });
 
-    // API 1: Vreden
-    try {
-      const { data } = await axios.get(`https://api.vreden.my.id/api/ig?url=${encodeURIComponent(url)}`, { timeout: 10000 });
-      if (data?.status && data?.result) {
-        const resultData = Array.isArray(data.result) ? data.result[0] : data.result;
-        directUrl = resultData.url || resultData.video_url;
+    const html = response.data;
+    let videoUrl = null;
+
+    // HTML එකේ og:video ටැග් එකෙන් ලින්ක් එක ගන්නවා
+    const ogVideoMatch = html.match(/<meta property="og:video" content="(.*?)"/);
+    if (ogVideoMatch && ogVideoMatch[1]) {
+      videoUrl = ogVideoMatch[1].replace(/&amp;/g, '&');
+    } 
+    
+    // ඒක නැත්නම් JSON ඩේටා එක ඇතුලේ video_url හොයනවා
+    if (!videoUrl) {
+      const jsonMatch = html.match(/"video_url":"(.*?)"/);
+      if (jsonMatch && jsonMatch[1]) {
+        videoUrl = jsonMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
       }
-    } catch (e) {}
-
-    // API 2: Siputzx (Fallback)
-    if (!directUrl) {
-      try {
-        const { data } = await axios.get(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(url)}`, { timeout: 10000 });
-        if (data?.status && data?.data?.length > 0) {
-          directUrl = data.data[0].url;
-        }
-      } catch (e) {}
     }
 
-    // API 3: Alyachan (Fallback)
-    if (!directUrl) {
-      try {
-        const { data } = await axios.get(`https://api.alyachan.pro/api/ig?url=${encodeURIComponent(url)}&apikey=G7I6X7`, { timeout: 10000 });
-        if (data?.status && data?.data?.url) {
-          directUrl = data.data.url;
-        }
-      } catch (e) {}
-    }
-
-    if (!directUrl) {
-      return res.status(404).json({ error: 'Could not extract video. Post might be private.' });
+    if (!videoUrl) {
+      return res.status(404).json({ error: 'Video not found. Post might be private or Instagram blocked the request.' });
     }
 
     res.json({
       success: true,
-      video_url: directUrl
+      video_url: videoUrl
     });
 
   } catch (err) {
-    res.status(500).json({ error: 'Server error while fetching Instagram video.' });
+    console.error('[Instagram API Error]', err.message);
+    res.status(500).json({ error: 'Server error while scraping Instagram.' });
   }
 });
 
