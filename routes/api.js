@@ -116,14 +116,39 @@ router.get('/facebook', requireApiKey, async (req, res) => {
     if (!url) return res.status(400).json({ error: 'Please provide a Facebook URL' });
 
     const cookieFile = getCookieFile('FACEBOOK_COOKIES', 'fb_cookies.txt');
+    const options = {
+      output: '-', noWarnings: true, noCallHome: true, format: 'best[ext=mp4]',
+      addHeader: [
+        'referer:facebook.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      ]
+    };
+    if (cookieFile) options.cookies = cookieFile;
+
+    const subprocess = youtubedl.exec(url, options);
+    res.header('Content-Type', 'video/mp4');
+    res.header('Content-Disposition', 'attachment; filename="facebook.mp4"');
+    subprocess.stdout.pipe(res);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: 'Facebook blocked the request.' });
+  }
+});
+
+// ── 6. Pinterest Video Downloader (Stream with Cookies) ─────
+router.get('/pinterest', requireApiKey, async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'Please provide a Pinterest URL' });
+
+    const cookieFile = getCookieFile('PINTEREST_COOKIES', 'pin_cookies.txt');
     
     const options = {
       output: '-',
       noWarnings: true,
       noCallHome: true,
-      format: 'best[ext=mp4]',
+      format: 'best[ext=mp4]/best',
       addHeader: [
-        'referer:facebook.com',
+        'referer:pinterest.com',
         'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       ]
     };
@@ -135,13 +160,13 @@ router.get('/facebook', requireApiKey, async (req, res) => {
     const subprocess = youtubedl.exec(url, options);
 
     res.header('Content-Type', 'video/mp4');
-    res.header('Content-Disposition', 'attachment; filename="facebook.mp4"');
+    res.header('Content-Disposition', 'attachment; filename="pinterest.mp4"');
     
     subprocess.stdout.pipe(res);
 
   } catch (err) {
-    console.error('[Facebook API Error]', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Facebook blocked the request or video is private.' });
+    console.error('[Pinterest API Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Pinterest blocked the request or video is private.' });
   }
 });
 
