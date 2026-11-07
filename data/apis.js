@@ -1,99 +1,137 @@
-module.exports = [
-  {
-    slug: 'song',
-    method: 'GET',
-    title: 'Song Download',
-    tagline: 'High-quality audio from any supported URL.',
-    description: 'Extract MP3 audio from YouTube. Streams return fast without saving to the server.',
-    params: [
-      { name: 'url', type: 'string', required: true, example: 'https://youtube.com/watch?v=...' }
-    ],
-    example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/song?url=https://youtube.com/watch?v=dQw4w9WgXcQ"`,
-    status: 'live' // ⬅️ මේක වෙනස් කළා
-  },
-  {
-    slug: 'tiktok',
-    method: 'GET',
-    title: 'TikTok Downloader',
-    tagline: 'No watermark video downloads.',
-    description: 'Download TikTok videos without watermarks directly to your bot. High-speed extraction.',
-    params: [
-      { name: 'url', type: 'string', required: true, example: 'https://vm.tiktok.com/...' }
-    ],
-    example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/tiktok?url=https://vm.tiktok.com/..."`,
-    status: 'live'
-  },
-  {
-    slug: 'video',
-    method: 'GET',
-    title: 'Video Download',
-    tagline: 'Any resolution. Any platform.',
-    description: 'Download YouTube video in high quality. Supports MP4 format directly.',
-    params: [
-      { name: 'url', type: 'string', required: true, example: 'https://youtube.com/watch?v=...' }
-    ],
-    example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/video?url=https://youtube.com/watch?v=dQw4w9WgXcQ"`,
-    status: 'live' // ⬅️ මේක වෙනස් කළා
-  },
-  {
-    slug: 'sticker',
-    method: 'POST',
-    title: 'Sticker Maker',
-    tagline: 'Image to WhatsApp sticker in one call.',
-    description: 'Convert any image to webp sticker, auto-cropped and resized to 512x512.',
-    params: [
-      { name: 'file', type: 'file', required: true, example: 'image.png' }
-    ],
-    example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -F "file=@image.png" \\\n  https://api.fixo.dev/sticker`,
-    status: 'coming_soon'
-  },
-  {
-    slug: 'qr',
-    method: 'GET',
-    title: 'QR Generator',
-    tagline: 'Text or URL to scannable QR.',
-    description: 'Generate high-contrast QR codes in PNG or SVG.',
-    params: [
-      { name: 'text', type: 'string', required: true, example: 'hello world' }
-    ],
-    example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/qr?text=hello"`,
-    status: 'coming_soon'
-  },
-  {
-    slug: 'translate',
-    method: 'GET',
-    title: 'Translate',
-    tagline: '60+ languages, sub-second latency.',
-    description: 'Translate text between Sinhala, English, Tamil, and 57 more languages.',
-    params: [
-      { name: 'text', type: 'string', required: true, example: 'hello' },
-      { name: 'to', type: 'string', required: true, example: 'si' }
-    ],
-    example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/translate?text=hello&to=si"`,
-    status: 'coming_soon'
-  },
-  {
-    slug: 'tts',
-    method: 'POST',
-    title: 'Text to Speech',
-    tagline: 'Natural voices, 40+ languages.',
-    description: 'Convert text to natural-sounding audio.',
-    params: [
-      { name: 'text', type: 'string', required: true, example: 'hello world' }
-    ],
-    example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -d '{"text":"hello"}' \\\n  https://api.fixo.dev/tts`,
-    status: 'coming_soon'
-  },
-{
-  slug: 'instagram',
-  method: 'GET',
-  title: 'Instagram Downloader',
-  tagline: 'Download Reels and Videos.',
-  description: 'Download Instagram Reels, videos, and IGTV posts directly to your bot without watermarks.',
-  params: [
-    { name: 'url', type: 'string', required: true, example: 'https://www.instagram.com/reel/...' }
-  ],
-  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/instagram?url=https://www.instagram.com/reel/..."`,
-  status: 'live'
+const express = require('express');
+const router = express.Router();
+const axios = require('axios');
+const youtubedl = require('youtube-dl-exec');
+const fs = require('fs');
+const { requireApiKey } = require('../middleware/apiAuth');
+
+// ── Helper: Write Cookies for YouTube ─────
+function getCookieFile() {
+  if (!process.env.YOUTUBE_COOKIES) return null;
+  const filePath = '/tmp/cookies.txt';
+  try {
+    fs.writeFileSync(filePath, process.env.YOUTUBE_COOKIES);
+    return filePath;
+  } catch (err) {
+    console.error('Error writing cookies file:', err.message);
+    return null;
+  }
 }
-];
+
+// ── 1. YouTube Song (MP3 Stream) ─────
+router.get('/song', requireApiKey, async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
+
+    const cookieFile = getCookieFile();
+    const options = {
+      format: 'bestaudio',
+      output: '-',
+      noWarnings: true,
+      noCallHome: true,
+      noCheckCertificate: true,
+      youtubeSkipDashManifest: true,
+      jsRuntimes: 'node',
+    };
+    if (cookieFile) options.cookies = cookieFile;
+
+    const subprocess = youtubedl.exec(url, options);
+    
+    res.header('Content-Type', 'audio/mpeg');
+    res.header('Content-Disposition', 'attachment; filename="audio.mp3"');
+    subprocess.stdout.pipe(res);
+  } catch (err) {
+    console.error('[Song API Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching song details' });
+  }
+});
+
+// ── 2. YouTube Video (MP4 Stream) ─────
+router.get('/video', requireApiKey, async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
+
+    const cookieFile = getCookieFile();
+    const options = {
+      format: 'best[ext=mp4]',
+      output: '-',
+      noWarnings: true,
+      noCallHome: true,
+      noCheckCertificate: true,
+      youtubeSkipDashManifest: true,
+      jsRuntimes: 'node',
+    };
+    if (cookieFile) options.cookies = cookieFile;
+
+    const subprocess = youtubedl.exec(url, options);
+
+    res.header('Content-Type', 'video/mp4');
+    res.header('Content-Disposition', 'attachment; filename="video.mp4"');
+    subprocess.stdout.pipe(res);
+  } catch (err) {
+    console.error('[Video API Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching video details' });
+  }
+});
+
+// ── 3. TikTok Video Download (JSON) ─────
+router.get('/tiktok', requireApiKey, async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'Please provide a TikTok URL' });
+
+    const config = { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 };
+    const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, config);
+    const result = apiRes.data;
+
+    if (result.code !== 0 || !result.data) {
+      return res.status(404).json({ error: 'TikTok video not found or private.' });
+    }
+
+    const data = result.data;
+    res.json({
+      success: true,
+      title: data.title || 'TikTok Video',
+      author: data.author?.nickname || 'Unknown',
+      video_url: data.play,
+      music_url: data.music_info?.play || null,
+      thumbnail: data.cover || null
+    });
+
+  } catch (err) {
+    console.error('TikTok API Error:', err.message);
+    res.status(500).json({ error: 'Server error while fetching TikTok video.' });
+  }
+});
+
+// ── 4. Instagram Video Downloader (Stream) ─────
+router.get('/instagram', requireApiKey, async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'Please provide an Instagram URL' });
+
+    // yt-dlp එකෙන් කෙලින්ම වීඩියෝ එක ස්ට්‍රීම් කරනවා (Headers එක්ක)
+    const subprocess = youtubedl.exec(url, {
+      output: '-',
+      noWarnings: true,
+      noCallHome: true,
+      addHeader: [
+        'referer:instagram.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      ]
+    });
+
+    res.header('Content-Type', 'video/mp4');
+    res.header('Content-Disposition', 'attachment; filename="instagram.mp4"');
+    
+    subprocess.stdout.pipe(res);
+
+  } catch (err) {
+    console.error('[Instagram API Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching Instagram video' });
+  }
+});
+
+module.exports = router;
