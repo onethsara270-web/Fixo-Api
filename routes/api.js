@@ -5,12 +5,12 @@ const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
 const { requireApiKey } = require('../middleware/apiAuth');
 
-// ── Helper: Write Cookies for YouTube ─────
-function getCookieFile() {
-  if (!process.env.YOUTUBE_COOKIES) return null;
-  const filePath = '/tmp/cookies.txt';
+// ── Helper: Write Cookies ─────
+function getCookieFile(envVar, fileName) {
+  if (!process.env[envVar]) return null;
+  const filePath = `/tmp/${fileName}`;
   try {
-    fs.writeFileSync(filePath, process.env.YOUTUBE_COOKIES);
+    fs.writeFileSync(filePath, process.env[envVar]);
     return filePath;
   } catch (err) {
     return null;
@@ -23,7 +23,7 @@ router.get('/song', requireApiKey, async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
 
-    const cookieFile = getCookieFile();
+    const cookieFile = getCookieFile('YOUTUBE_COOKIES', 'yt_cookies.txt');
     const options = {
       format: 'bestaudio', output: '-', noWarnings: true, noCallHome: true,
       noCheckCertificate: true, youtubeSkipDashManifest: true, jsRuntimes: 'node',
@@ -45,7 +45,7 @@ router.get('/video', requireApiKey, async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
 
-    const cookieFile = getCookieFile();
+    const cookieFile = getCookieFile('YOUTUBE_COOKIES', 'yt_cookies.txt');
     const options = {
       format: 'best[ext=mp4]', output: '-', noWarnings: true, noCallHome: true,
       noCheckCertificate: true, youtubeSkipDashManifest: true, jsRuntimes: 'node',
@@ -84,47 +84,41 @@ router.get('/tiktok', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 4. Instagram Video Downloader (Direct Scraping - OUR OWN METHOD) ─────
+// ── 4. Instagram Video Downloader (Stream with Cookies) ─────
 router.get('/instagram', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide an Instagram URL' });
 
-    let directUrl = null;
+    // Instagram Cookies ටික ගන්නවා
+    const cookieFile = getCookieFile('INSTAGRAM_COOKIES', 'ig_cookies.txt');
 
-    // අපේම ක්‍රමය: WhatsApp බොට් කෙනෙක් විදියට Instagram එකට රික්වෙස්ට් එක යවනවා
-    try {
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'WhatsApp/2.23.20.0', // මේකෙන් බ්ලොක් එක මගහරිනවා
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        },
-        timeout: 15000
-      });
+    const options = {
+      output: '-',
+      noWarnings: true,
+      noCallHome: true,
+      format: 'best',
+      addHeader: [
+        'referer:instagram.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      ]
+    };
 
-      const html = response.data;
-      
-      // HTML එක ඇතුලේ og:video ටැග් එකෙන් ලින්ක් එක ගන්නවා
-      const ogVideoMatch = html.match(/<meta property="og:video" content="(.*?)"/);
-      if (ogVideoMatch && ogVideoMatch[1]) {
-        directUrl = ogVideoMatch[1].replace(/&amp;/g, '&');
-      }
-    } catch (e) {
-      console.error('[IG Scrape Error]', e.message);
+    // Cookies තියෙනවා නම් ඒක දෙනවා
+    if (cookieFile) {
+      options.cookies = cookieFile;
     }
 
-    if (!directUrl) {
-      return res.status(404).json({ error: 'Video not found. Post might be private or Instagram blocked the request.' });
-    }
+    const subprocess = youtubedl.exec(url, options);
 
-    res.json({
-      success: true,
-      video_url: directUrl
-    });
+    res.header('Content-Type', 'video/mp4');
+    res.header('Content-Disposition', 'attachment; filename="instagram.mp4"');
+    
+    subprocess.stdout.pipe(res);
 
   } catch (err) {
     console.error('[Instagram API Error]', err.message);
-    res.status(500).json({ error: 'Server error while scraping Instagram.' });
+    if (!res.headersSent) res.status(500).json({ error: 'Instagram blocked the request' });
   }
 });
 
