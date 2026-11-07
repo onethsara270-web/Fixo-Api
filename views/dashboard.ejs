@@ -58,7 +58,7 @@
           <a href="/docs/<%= api.slug %>" class="feature glass" style="text-decoration:none;color:inherit">
             <h3><%= api.title %></h3>
             <p><%= api.tagline %></p>
-            <span class="badge"><%= api.method %></span>
+            <span class="badge <%= api.status === 'live' ? 'ok' : '' %>"><%= api.status === 'live' ? 'LIVE' : 'COMING SOON' %></span>
           </a>
         <% }) %>
       </div>
@@ -66,7 +66,7 @@
   </div>
 </section>
 
-<!-- MODAL 1: LABEL INPUT (අලුතෙන් හදපු ලේබල් එක ගන්න එක) -->
+<!-- NEW KEY MODAL -->
 <div id="labelModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); align-items:center; justify-content:center; padding:20px;">
   <div class="glass" style="max-width:400px; width:100%; padding:32px; border-radius:16px; border:1px solid rgba(139, 92, 246, 0.3);">
     <h2 style="color:#f4f4f7; margin-bottom:8px; font-size:1.2rem;">New API Key</h2>
@@ -83,7 +83,7 @@
   </div>
 </div>
 
-<!-- MODAL 2: SUCCESS (Key එක පෙන්නන එක) -->
+<!-- SUCCESS MODAL -->
 <div id="keyModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); align-items:center; justify-content:center; padding:20px;">
   <div class="glass" style="max-width:500px; width:100%; padding:40px; border-radius:16px; text-align:center; position:relative; border:1px solid rgba(139, 92, 246, 0.3);">
     <h2 style="color:#8b5cf6; margin-bottom:10px;">Success!</h2>
@@ -101,19 +101,16 @@
 </div>
 
 <script>
-// Modal එක අරිනවා
 function openLabelModal() {
   document.getElementById('keyLabelInput').value = 'Default';
   document.getElementById('labelModal').style.display = 'flex';
   document.getElementById('keyLabelInput').focus();
 }
 
-// Modal එක වහනවා
 function closeLabelModal() {
   document.getElementById('labelModal').style.display = 'none';
 }
 
-// Key එක හදන ප්‍රධාන ෆන්ක්ෂන් එක
 async function submitNewKey() {
   const labelInput = document.getElementById('keyLabelInput').value.trim();
   const label = labelInput || 'Default';
@@ -147,7 +144,6 @@ async function submitNewKey() {
   }
 }
 
-// Key එක කොපි කරනවා
 function copyNewKey(btn) {
   const text = document.getElementById('newKeyText').textContent;
   navigator.clipboard.writeText(text);
@@ -156,7 +152,6 @@ function copyNewKey(btn) {
   setTimeout(() => btn.textContent = old, 1500);
 }
 
-// Success Modal එක වහලා රීලෝඩ් වෙනවා
 function closeSuccessModal() {
   document.getElementById('keyModal').style.display = 'none';
   location.reload();
