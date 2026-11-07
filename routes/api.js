@@ -84,45 +84,42 @@ router.get('/tiktok', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 4. Instagram Video Downloader (Direct Scraping) ─────
+// ── 4. Instagram Video Downloader (Direct Scraping - OUR OWN METHOD) ─────
 router.get('/instagram', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide an Instagram URL' });
 
-    // කෙලින්ම Instagram එකට රික්වෙස්ට් එක යවනවා
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      timeout: 15000
-    });
+    let directUrl = null;
 
-    const html = response.data;
-    let videoUrl = null;
+    // අපේම ක්‍රමය: WhatsApp බොට් කෙනෙක් විදියට Instagram එකට රික්වෙස්ට් එක යවනවා
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'WhatsApp/2.23.20.0', // මේකෙන් බ්ලොක් එක මගහරිනවා
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        },
+        timeout: 15000
+      });
 
-    // HTML එකේ og:video ටැග් එකෙන් ලින්ක් එක ගන්නවා
-    const ogVideoMatch = html.match(/<meta property="og:video" content="(.*?)"/);
-    if (ogVideoMatch && ogVideoMatch[1]) {
-      videoUrl = ogVideoMatch[1].replace(/&amp;/g, '&');
-    } 
-    
-    // ඒක නැත්නම් JSON ඩේටා එක ඇතුලේ video_url හොයනවා
-    if (!videoUrl) {
-      const jsonMatch = html.match(/"video_url":"(.*?)"/);
-      if (jsonMatch && jsonMatch[1]) {
-        videoUrl = jsonMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+      const html = response.data;
+      
+      // HTML එක ඇතුලේ og:video ටැග් එකෙන් ලින්ක් එක ගන්නවා
+      const ogVideoMatch = html.match(/<meta property="og:video" content="(.*?)"/);
+      if (ogVideoMatch && ogVideoMatch[1]) {
+        directUrl = ogVideoMatch[1].replace(/&amp;/g, '&');
       }
+    } catch (e) {
+      console.error('[IG Scrape Error]', e.message);
     }
 
-    if (!videoUrl) {
+    if (!directUrl) {
       return res.status(404).json({ error: 'Video not found. Post might be private or Instagram blocked the request.' });
     }
 
     res.json({
       success: true,
-      video_url: videoUrl
+      video_url: directUrl
     });
 
   } catch (err) {
