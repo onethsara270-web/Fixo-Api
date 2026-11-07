@@ -39,12 +39,24 @@ module.exports = [
     slug: 'instagram',
     method: 'GET',
     title: 'Instagram Downloader',
-    tagline: 'Download Reels and Videos.',
-    description: 'Download Instagram Reels, videos, and IGTV posts directly to your bot without watermarks.',
+    tagline: 'Reels and video downloads.',
+    description: 'Download Instagram Reels and videos securely using your own cookies.',
     params: [
       { name: 'url', type: 'string', required: true, example: 'https://www.instagram.com/reel/...' }
     ],
     example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/instagram?url=https://www.instagram.com/reel/..."`,
+    status: 'live'
+  },
+  {
+    slug: 'facebook',
+    method: 'GET',
+    title: 'Facebook Downloader',
+    tagline: 'Download Facebook videos and reels.',
+    description: 'Download Facebook reels and videos securely using your own cookies.',
+    params: [
+      { name: 'url', type: 'string', required: true, example: 'https://www.facebook.com/reel/...' }
+    ],
+    example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/facebook?url=https://www.facebook.com/reel/..."`,
     status: 'live'
   },
   {
