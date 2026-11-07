@@ -90,21 +90,44 @@ router.get('/instagram', requireApiKey, async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide an Instagram URL' });
 
-    // Instagram Cookies ටික ගන්නවා
     const cookieFile = getCookieFile('INSTAGRAM_COOKIES', 'ig_cookies.txt');
-
     const options = {
-      output: '-',
-      noWarnings: true,
-      noCallHome: true,
-      format: 'best',
+      output: '-', noWarnings: true, noCallHome: true, format: 'best',
       addHeader: [
         'referer:instagram.com',
         'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       ]
     };
+    if (cookieFile) options.cookies = cookieFile;
 
-    // Cookies තියෙනවා නම් ඒක දෙනවා
+    const subprocess = youtubedl.exec(url, options);
+    res.header('Content-Type', 'video/mp4');
+    res.header('Content-Disposition', 'attachment; filename="instagram.mp4"');
+    subprocess.stdout.pipe(res);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: 'Instagram blocked the request' });
+  }
+});
+
+// ── 5. Facebook Video Downloader (Stream with Cookies) ─────
+router.get('/facebook', requireApiKey, async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'Please provide a Facebook URL' });
+
+    const cookieFile = getCookieFile('FACEBOOK_COOKIES', 'fb_cookies.txt');
+    
+    const options = {
+      output: '-',
+      noWarnings: true,
+      noCallHome: true,
+      format: 'best[ext=mp4]',
+      addHeader: [
+        'referer:facebook.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      ]
+    };
+
     if (cookieFile) {
       options.cookies = cookieFile;
     }
@@ -112,13 +135,13 @@ router.get('/instagram', requireApiKey, async (req, res) => {
     const subprocess = youtubedl.exec(url, options);
 
     res.header('Content-Type', 'video/mp4');
-    res.header('Content-Disposition', 'attachment; filename="instagram.mp4"');
+    res.header('Content-Disposition', 'attachment; filename="facebook.mp4"');
     
     subprocess.stdout.pipe(res);
 
   } catch (err) {
-    console.error('[Instagram API Error]', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Instagram blocked the request' });
+    console.error('[Facebook API Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Facebook blocked the request or video is private.' });
   }
 });
 
