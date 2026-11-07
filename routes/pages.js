@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const ApiKey = require('../models/ApiKey');
-const User = require('../models/User'); // User Model එක අවශ්‍යයි
+const User = require('../models/User');
 const apis = require('../data/apis');
 
 // ── Landing ───────────────────────────────────────
