@@ -134,66 +134,67 @@ router.get('/facebook', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 6. Pinterest Video Downloader (Smart Fallback) ─────
+// ── 6. Pinterest Video Downloader (Direct Scraping) ─────
 router.get('/pinterest', requireApiKey, async (req, res) => {
   try {
     let { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a Pinterest URL' });
 
-    // 1. Short Link එකක් නම් (pin.it), ඒක ලොකු ලින්ක් එකට හරවගන්නවා
+    // 1. pin.it ලින්ක් එකක් නම් ඒක ලොකු ලින්ක් එකට හරවගන්නවා (Redirect Follow)
     if (url.includes('pin.it')) {
       try {
         const resolveRes = await axios.get(url, { timeout: 10000 });
-        if (resolveRes.request && resolveRes.request.res && resolveRes.request.res.responseUrl) {
-          url = resolveRes.request.res.responseUrl;
-        }
-      } catch (e) { console.error('Pin.it resolve failed'); }
+        url = resolveRes.request.res.responseUrl || url;
+      } catch (e) {
+        console.error('Pin.it resolve failed');
+      }
     }
 
-    let directUrl = null;
+    // 2. කෙලින්ම Pinterest එකට රික්වෙස්ට් එක යවලා HTML එක ගන්නවා
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5'
+      },
+      timeout: 15000
+    });
 
-    // 2. මුලින්ම විශ්වාසදායක API එකකින් ලින්ක් එක ගන්නවා (yt-dlp ෆේල් වෙන නිසා)
-    try {
-      const { data } = await axios.get(`https://api.vreden.my.id/api/pinterest?url=${encodeURIComponent(url)}`, { timeout: 15000 });
-      if (data?.status && data?.result?.url) directUrl = data.result.url;
-    } catch (e) {}
+    const html = response.data;
+    let videoUrl = null;
 
-    // 3. ඒක ෆේල් වුනොත් තව API එකක්
-    if (!directUrl) {
-      try {
-        const { data } = await axios.get(`https://api.siputzx.my.id/api/d/pinterest?url=${encodeURIComponent(url)}`, { timeout: 15000 });
-        if (data?.status && data?.data?.url) directUrl = data.data.url;
-      } catch (e) {}
+    // 3. HTML එකේ තියෙන og:video ටැග් එකෙන් වීඩියෝ ලින්ක් එක ගන්නවා
+    const ogVideoMatch = html.match(/<meta property="og:video" content="(.*?)"/);
+    if (ogVideoMatch && ogVideoMatch[1]) {
+      videoUrl = ogVideoMatch[1].replace(/&amp;/g, '&');
+    } 
+    
+    // ඒක නැත්නම් JSON ඩේටා එක ඇතුලේ video url එක හොයනවා
+    if (!videoUrl) {
+      const jsonMatch = html.match(/"url":"(https:\/\/v1\.pinimg\.com\/videos\/.*?\.mp4)"/);
+      if (jsonMatch && jsonMatch[1]) {
+        videoUrl = jsonMatch[1].replace(/\\/g, '');
+      }
+    }
+
+    if (!videoUrl) {
+      return res.status(404).json({ error: 'Video not found. Post might be an image or private.' });
     }
 
     // 4. ලින්ක් එක හම්බුනා නම් ඒක කෙලින්ම ස්ට්‍රීම් කරනවා
-    if (directUrl) {
-      const videoRes = await axios({ 
-        method: 'get', 
-        url: directUrl, 
-        responseType: 'stream',
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-      });
-      res.header('Content-Type', 'video/mp4');
-      res.header('Content-Disposition', 'attachment; filename="pinterest.mp4"');
-      return videoRes.data.pipe(res);
-    }
+    const videoRes = await axios({
+      method: 'get',
+      url: videoUrl,
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://www.pinterest.com/'
+      }
+    });
 
-    // 5. අන්තිම උත්සාහය: yt-dlp + cookies
-    const cookieFile = getCookieFile('PINTEREST_COOKIES', 'pin_cookies.txt');
-    const options = {
-      output: '-', noWarnings: true, noCallHome: true, format: 'best[ext=mp4]/best',
-      addHeader: [
-        'referer:pinterest.com',
-        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      ]
-    };
-    if (cookieFile) options.cookies = cookieFile;
-
-    const subprocess = youtubedl.exec(url, options);
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="pinterest.mp4"');
-    subprocess.stdout.pipe(res);
+    videoRes.data.pipe(res);
 
   } catch (err) {
     console.error('[Pinterest API Error]', err.message);
