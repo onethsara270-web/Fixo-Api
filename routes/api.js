@@ -134,39 +134,70 @@ router.get('/facebook', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 6. Pinterest Video Downloader (Stream with Cookies) ─────
+// ── 6. Pinterest Video Downloader (Smart Fallback) ─────
 router.get('/pinterest', requireApiKey, async (req, res) => {
   try {
-    const { url } = req.query;
+    let { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a Pinterest URL' });
 
+    // 1. Short Link එකක් නම් (pin.it), ඒක ලොකු ලින්ක් එකට හරවගන්නවා
+    if (url.includes('pin.it')) {
+      try {
+        const resolveRes = await axios.get(url, { timeout: 10000 });
+        if (resolveRes.request && resolveRes.request.res && resolveRes.request.res.responseUrl) {
+          url = resolveRes.request.res.responseUrl;
+        }
+      } catch (e) { console.error('Pin.it resolve failed'); }
+    }
+
+    let directUrl = null;
+
+    // 2. මුලින්ම විශ්වාසදායක API එකකින් ලින්ක් එක ගන්නවා (yt-dlp ෆේල් වෙන නිසා)
+    try {
+      const { data } = await axios.get(`https://api.vreden.my.id/api/pinterest?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+      if (data?.status && data?.result?.url) directUrl = data.result.url;
+    } catch (e) {}
+
+    // 3. ඒක ෆේල් වුනොත් තව API එකක්
+    if (!directUrl) {
+      try {
+        const { data } = await axios.get(`https://api.siputzx.my.id/api/d/pinterest?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+        if (data?.status && data?.data?.url) directUrl = data.data.url;
+      } catch (e) {}
+    }
+
+    // 4. ලින්ක් එක හම්බුනා නම් ඒක කෙලින්ම ස්ට්‍රීම් කරනවා
+    if (directUrl) {
+      const videoRes = await axios({ 
+        method: 'get', 
+        url: directUrl, 
+        responseType: 'stream',
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      res.header('Content-Type', 'video/mp4');
+      res.header('Content-Disposition', 'attachment; filename="pinterest.mp4"');
+      return videoRes.data.pipe(res);
+    }
+
+    // 5. අන්තිම උත්සාහය: yt-dlp + cookies
     const cookieFile = getCookieFile('PINTEREST_COOKIES', 'pin_cookies.txt');
-    
     const options = {
-      output: '-',
-      noWarnings: true,
-      noCallHome: true,
-      format: 'best[ext=mp4]/best',
+      output: '-', noWarnings: true, noCallHome: true, format: 'best[ext=mp4]/best',
       addHeader: [
         'referer:pinterest.com',
         'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       ]
     };
-
-    if (cookieFile) {
-      options.cookies = cookieFile;
-    }
+    if (cookieFile) options.cookies = cookieFile;
 
     const subprocess = youtubedl.exec(url, options);
-
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="pinterest.mp4"');
-    
     subprocess.stdout.pipe(res);
 
   } catch (err) {
     console.error('[Pinterest API Error]', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Pinterest blocked the request or video is private.' });
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching Pinterest video' });
   }
 });
 
