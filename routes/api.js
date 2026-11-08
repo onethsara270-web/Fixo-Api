@@ -5,7 +5,7 @@ const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
 const { requireApiKey } = require('../middleware/apiAuth');
 
-// ── Helper: Write Cookies ─────
+// ── Helper: Write Cookies to file for yt-dlp ─────
 function getCookieFile(envVar, fileName) {
   if (!process.env[envVar]) return null;
   const filePath = `/tmp/${fileName}`;
@@ -15,6 +15,21 @@ function getCookieFile(envVar, fileName) {
   } catch (err) {
     return null;
   }
+}
+
+// ── Helper: Parse Netscape Cookies to Header String for Axios ─────
+function getCookieHeader(envVar) {
+  if (!process.env[envVar]) return '';
+  const lines = process.env[envVar].split('\n');
+  const cookies = [];
+  for (const line of lines) {
+    if (line.trim() === '' || line.startsWith('#')) continue;
+    const parts = line.split('\t');
+    if (parts.length >= 7) {
+      cookies.push(`${parts[5]}=${parts[6]}`);
+    }
+  }
+  return cookies.join('; ');
 }
 
 // ── 1. YouTube Song (MP3 Stream) ─────
@@ -134,67 +149,75 @@ router.get('/facebook', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 6. Pinterest Video Downloader (Direct Scraping) ─────
+// ── 6. Pinterest Video Downloader (With Cookies Scraping) ─────
 router.get('/pinterest', requireApiKey, async (req, res) => {
   try {
     let { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a Pinterest URL' });
 
-    // 1. pin.it ලින්ක් එකක් නම් ඒක ලොකු ලින්ක් එකට හරවගන්නවා (Redirect Follow)
+    // 1. Short link එකක් නම් ලොකු ලින්ක් එකට හරවන්න
     if (url.includes('pin.it')) {
       try {
-        const resolveRes = await axios.get(url, { timeout: 10000 });
-        url = resolveRes.request.res.responseUrl || url;
-      } catch (e) {
-        console.error('Pin.it resolve failed');
-      }
+        const resolve = await axios.get(url, { maxRedirects: 5 });
+        url = resolve.request.res.responseUrl || url;
+      } catch (e) { console.error('Pin.it resolve failed'); }
     }
 
-    // 2. කෙලින්ම Pinterest එකට රික්වෙස්ට් එක යවලා HTML එක ගන්නවා
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5'
-      },
-      timeout: 15000
-    });
+    // 2. අපේ Cookies ටික Header එකට හදාගන්නවා
+    const cookieHeader = getCookieHeader('PINTEREST_COOKIES');
+    let directUrl = null;
 
-    const html = response.data;
-    let videoUrl = null;
+    // 3. අපේම ක්‍රමය: කෙලින්ම Pinterest එකට රික්වෙස්ට් එක යවනවා (Cookies එක්ක)
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Cookie': cookieHeader // මෙතන තමයි Cookies ටික දාන්නේ
+        },
+        timeout: 15000
+      });
 
-    // 3. HTML එකේ තියෙන og:video ටැග් එකෙන් වීඩියෝ ලින්ක් එක ගන්නවා
-    const ogVideoMatch = html.match(/<meta property="og:video" content="(.*?)"/);
-    if (ogVideoMatch && ogVideoMatch[1]) {
-      videoUrl = ogVideoMatch[1].replace(/&amp;/g, '&');
-    } 
-    
-    // ඒක නැත්නම් JSON ඩේටා එක ඇතුලේ video url එක හොයනවා
-    if (!videoUrl) {
-      const jsonMatch = html.match(/"url":"(https:\/\/v1\.pinimg\.com\/videos\/.*?\.mp4)"/);
-      if (jsonMatch && jsonMatch[1]) {
-        videoUrl = jsonMatch[1].replace(/\\/g, '');
+      const html = response.data;
+      // og:video ටැග් එකෙන් ලින්ක් එක ගන්නවා
+      const ogMatch = html.match(/<meta property="og:video" content="(.*?)"/);
+      if (ogMatch && ogMatch[1]) {
+        directUrl = ogMatch[1].replace(/&amp;/g, '&');
+      } else {
+        // ඒක නැත්නම් JSON ඩේටා එකෙන් හොයනවා
+        const jsonMatch = html.match(/"url":"(https:\/\/v1\.pinimg\.com\/videos\/.*?\.mp4)"/);
+        if (jsonMatch && jsonMatch[1]) directUrl = jsonMatch[1].replace(/\\/g, '');
       }
+    } catch (e) {
+      console.error('[Pinterest Scrape Error]', e.message);
     }
 
-    if (!videoUrl) {
-      return res.status(404).json({ error: 'Video not found. Post might be an image or private.' });
+    // 4. ලින්ක් එක හම්බුනා නම් ස්ට්‍රීම් කරනවා
+    if (directUrl) {
+      const videoRes = await axios({
+        method: 'get', url: directUrl, responseType: 'stream',
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.pinterest.com/' }
+      });
+      res.header('Content-Type', 'video/mp4');
+      res.header('Content-Disposition', 'attachment; filename="pinterest.mp4"');
+      return videoRes.data.pipe(res);
     }
 
-    // 4. ලින්ක් එක හම්බුනා නම් ඒක කෙලින්ම ස්ට්‍රීම් කරනවා
-    const videoRes = await axios({
-      method: 'get',
-      url: videoUrl,
-      responseType: 'stream',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://www.pinterest.com/'
-      }
-    });
+    // 5. ඒක ෆේල් වුනොත් විතරක් yt-dlp එකට යනවා (Cookies එක්කම)
+    const cookieFile = getCookieFile('PINTEREST_COOKIES', 'pin_cookies.txt');
+    const options = {
+      output: '-', noWarnings: true, noCallHome: true, format: 'best[ext=mp4]/best',
+      addHeader: [
+        'referer:pinterest.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      ]
+    };
+    if (cookieFile) options.cookies = cookieFile;
 
+    const subprocess = youtubedl.exec(url, options);
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="pinterest.mp4"');
-    videoRes.data.pipe(res);
+    subprocess.stdout.pipe(res);
 
   } catch (err) {
     console.error('[Pinterest API Error]', err.message);
