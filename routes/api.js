@@ -112,7 +112,7 @@ router.get('/facebook', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 6. Translate (Google & MyMemory Fallback) ─────
+// ── 6. Translate (Google & Siputzx Fallback) ─────
 router.get('/translate', requireApiKey, async (req, res) => {
   try {
     const { text, to, from } = req.query;
@@ -129,23 +129,23 @@ router.get('/translate', requireApiKey, async (req, res) => {
         translatedText = data[0].map(item => item[0]).join('');
       }
     } catch (e) {
-      console.error('Google Translate failed, trying MyMemory...');
+      console.error('Google Translate failed, trying Siputzx...');
     }
 
-    // ක්‍රමය 2: MyMemory API (Fallback)
+    // ක්‍රමය 2: Siputzx API (Fallback)
     if (!translatedText) {
       try {
-        const mUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${to}`;
-        const { data } = await axios.get(mUrl, { timeout: 10000 });
-        if (data && data.responseData && data.responseData.translatedText) {
-          translatedText = data.responseData.translatedText;
+        const sUrl = `https://api.siputzx.my.id/api/tools/translate?text=${encodeURIComponent(text)}&to=${to}`;
+        const { data } = await axios.get(sUrl, { timeout: 10000 });
+        if (data && data.status && data.data && data.data.result) {
+          translatedText = data.data.result;
         }
       } catch (e) {
-        console.error('MyMemory Translate failed');
+        console.error('Siputzx Translate failed');
       }
     }
 
-    if (!translatedText) {
+    if (!translatedText || translatedText.includes("INVALID SOURCE LANGUAGE")) {
       return res.status(500).json({ error: 'Translation failed. Please try again.' });
     }
 
