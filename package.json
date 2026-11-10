@@ -20,7 +20,7 @@
     "axios": "^1.21.0",
     "@tobyg74/tiktok-api-dl": "^1.3.7",
     "youtube-dl-exec": "^3.1.19",
-    "google-translate-api-x": "^10.5.0"
+    "google-translate-api-x": "^10.7.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
