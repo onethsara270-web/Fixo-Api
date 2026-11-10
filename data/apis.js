@@ -84,18 +84,19 @@ module.exports = [
     status: 'coming_soon'
   },
   {
-    slug: 'translate',
-    method: 'GET',
-    title: 'Translate',
-    tagline: '60+ languages, sub-second latency.',
-    description: 'Translate text between Sinhala, English, Tamil, and 57 more languages.',
-    params: [
-      { name: 'text', type: 'string', required: true, example: 'hello' },
-      { name: 'to', type: 'string', required: true, example: 'si' }
-    ],
-    example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/translate?text=hello&to=si"`,
-    status: 'coming_soon'
-  },
+  slug: 'translate',
+  method: 'GET',
+  title: 'Translate',
+  tagline: '60+ languages, sub-second latency.',
+  description: 'Translate text between Sinhala, English, Tamil, and 57 more languages using our own engine.',
+  params: [
+    { name: 'text', type: 'string', required: true, example: 'hello' },
+    { name: 'to', type: 'string', required: true, example: 'si' },
+    { name: 'from', type: 'string', required: false, example: 'auto' }
+  ],
+  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/translate?text=hello&to=si"`,
+  status: 'live'
+},
   {
     slug: 'tts',
     method: 'POST',
@@ -107,17 +108,5 @@ module.exports = [
     ],
     example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -d '{"text":"hello"}' \\\n  https://api.fixo.dev/tts`,
     status: 'coming_soon'
-  },
-  {
-  slug: 'pinterest',
-  method: 'GET',
-  title: 'Pinterest Downloader',
-  tagline: 'Download Pinterest videos and ideas.',
-  description: 'Download Pinterest video pins securely using your own cookies.',
-  params: [
-    { name: 'url', type: 'string', required: true, example: 'https://www.pinterest.com/pin/...' }
-  ],
-  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/pinterest?url=https://www.pinterest.com/pin/..."`,
-  status: 'live'
-}
+  }
 ];
