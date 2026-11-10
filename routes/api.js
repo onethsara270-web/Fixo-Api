@@ -3,6 +3,7 @@ const router = express.Router();
 const axios = require('axios');
 const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
+const { translate } = require('google-translate-api-x'); // අලුත් පැකේජ් එක
 const { requireApiKey } = require('../middleware/apiAuth');
 
 // ── Helper: Write Cookies ─────
@@ -112,48 +113,20 @@ router.get('/facebook', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 6. Translate (Google & Siputzx Fallback) ─────
+// ── 6. Translate (Using google-translate-api-x) ─────
 router.get('/translate', requireApiKey, async (req, res) => {
   try {
     const { text, to, from } = req.query;
     if (!text || !to) return res.status(400).json({ error: 'Please provide text and a target language (to)' });
     
-    const sourceLang = from || 'auto';
-    let translatedText = null;
-
-    // ක්‍රමය 1: Google Translate Free Endpoint
-    try {
-      const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${to}&dt=t&q=${encodeURIComponent(text)}`;
-      const { data } = await axios.get(gUrl, { timeout: 10000 });
-      if (data && data[0] && data[0][0] && data[0][0][0]) {
-        translatedText = data[0].map(item => item[0]).join('');
-      }
-    } catch (e) {
-      console.error('Google Translate failed, trying Siputzx...');
-    }
-
-    // ක්‍රමය 2: Siputzx API (Fallback)
-    if (!translatedText) {
-      try {
-        const sUrl = `https://api.siputzx.my.id/api/tools/translate?text=${encodeURIComponent(text)}&to=${to}`;
-        const { data } = await axios.get(sUrl, { timeout: 10000 });
-        if (data && data.status && data.data && data.data.result) {
-          translatedText = data.data.result;
-        }
-      } catch (e) {
-        console.error('Siputzx Translate failed');
-      }
-    }
-
-    if (!translatedText || translatedText.includes("INVALID SOURCE LANGUAGE")) {
-      return res.status(500).json({ error: 'Translation failed. Please try again.' });
-    }
+    // අපේම පැකේජ් එකෙන් කෙලින්ම ට්‍රාන්ස්ලේට් කරනවා
+    const result = await translate(text, { to: to, from: from || 'auto' });
 
     res.json({
       success: true,
       original: text,
-      translated: translatedText,
-      from: sourceLang,
+      translated: result.text,
+      from: result.from.language.iso,
       to: to
     });
 
