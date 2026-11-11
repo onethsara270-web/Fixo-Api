@@ -103,28 +103,49 @@ router.get('/instagram', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 5. Facebook Video (Fallback API - Reverted) ─────
+// ── 5. Facebook Video (Cookies + Fallback) ─────
 router.get('/facebook', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a Facebook URL' });
 
-    // කලින් වැඩ කරපු විදියටම API එකකින් ලින්ක් එක ගන්නවා
-    const apiRes = await axios.get(`https://api.vreden.my.id/api/fb?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+    const cookieFile = getCookieFile('FACEBOOK_COOKIES', 'fb_cookies.txt');
     
-    if (!apiRes.data?.status || !apiRes.data?.result?.download?.url) {
-      throw new Error('API failed to extract video');
-    }
+    const options = {
+      output: '-',
+      noWarnings: true,
+      noCallHome: true,
+      format: 'best[ext=mp4]/best',
+      addHeader: [
+        'referer:facebook.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      ]
+    };
 
-    const downloadUrl = apiRes.data.result.download.url;
-    const videoRes = await axios({
-      method: 'get', url: downloadUrl, responseType: 'stream',
-      headers: { 'User-Agent': 'Mozilla/5.0' }
+    if (cookieFile) options.cookies = cookieFile;
+
+    const subprocess = youtubedl.exec(url, options);
+
+    // Error එකක් ආවොත් ඒක අල්ලගන්නවා
+    let hasError = false;
+    subprocess.stderr.on('data', (data) => {
+      const log = data.toString();
+      if (log.includes('ERROR:')) {
+        hasError = true;
+        console.error('[FB yt-dlp Error]', log);
+      }
+    });
+
+    subprocess.on('close', (code) => {
+      if (code !== 0 && !res.headersSent) {
+        hasError = true;
+      }
     });
 
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="facebook.mp4"');
-    videoRes.data.pipe(res);
+    
+    subprocess.stdout.pipe(res);
 
   } catch (err) {
     console.error('[Facebook API Error]', err.message);
@@ -237,7 +258,7 @@ router.get('/mediafire', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 12. APK Downloader (Direct API - No Play Store Scraper) ─────
+// ── 12. APK Downloader (New Reliable APIs) ─────
 router.get('/apk', requireApiKey, async (req, res) => {
   try {
     const { q } = req.query;
@@ -247,27 +268,16 @@ router.get('/apk', requireApiKey, async (req, res) => {
     let appTitle = q;
     let developer = 'Unknown';
 
-    // API 1: Nexoracle (කෙලින්ම නමින් හොයනවා)
+    // API 1: Ryzendesu (ගොඩක් වෙලාවට වැඩ)
     try {
-      const { data } = await axios.get(`https://api.nexoracle.com/downloader/apk?apikey=free_key@maher_apis&q=${encodeURIComponent(q)}`, { timeout: 15000 });
-      if (data?.status && data?.result?.url) {
-        downloadUrl = data.result.url;
-        if (data.result.name) appTitle = data.result.name;
+      const { data } = await axios.get(`https://api.ryzendesu.vip/api/downloader/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
+      if (data?.status && data?.data?.url) {
+        downloadUrl = data.data.url;
+        if (data.data.name) appTitle = data.data.name;
       }
-    } catch (e) { console.log('Nexoracle APK failed'); }
+    } catch (e) { console.log('Ryzendesu APK failed'); }
 
-    // API 2: Vreden (Fallback)
-    if (!downloadUrl) {
-      try {
-        const { data } = await axios.get(`https://api.vreden.my.id/api/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
-        if (data?.status && data?.result?.url) {
-          downloadUrl = data.result.url;
-          if (data.result.name) appTitle = data.result.name;
-        }
-      } catch (e) { console.log('Vreden APK failed'); }
-    }
-
-    // API 3: Siputzx (Fallback)
+    // API 2: Siputzx (Fallback)
     if (!downloadUrl) {
       try {
         const { data } = await axios.get(`https://api.siputzx.my.id/api/d/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
@@ -276,6 +286,17 @@ router.get('/apk', requireApiKey, async (req, res) => {
           if (data.data.name) appTitle = data.data.name;
         }
       } catch (e) { console.log('Siputzx APK failed'); }
+    }
+
+    // API 3: Vreden (Fallback)
+    if (!downloadUrl) {
+      try {
+        const { data } = await axios.get(`https://api.vreden.my.id/api/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
+        if (data?.status && data?.result?.url) {
+          downloadUrl = data.result.url;
+          if (data.result.name) appTitle = data.result.name;
+        }
+      } catch (e) { console.log('Vreden APK failed'); }
     }
 
     if (!downloadUrl) {
