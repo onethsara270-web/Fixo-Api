@@ -81,7 +81,7 @@ module.exports = [
       { name: 'text', type: 'string', required: true, example: 'hello world' }
     ],
     example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/qr?text=hello"`,
-    status: 'coming_soon'
+    status: 'live'
   },
   {
   slug: 'translate',
@@ -107,6 +107,6 @@ module.exports = [
       { name: 'text', type: 'string', required: true, example: 'hello world' }
     ],
     example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -d '{"text":"hello"}' \\\n  https://api.fixo.dev/tts`,
-    status: 'coming_soon'
+    status: 'live'
   }
 ];
