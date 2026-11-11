@@ -7,7 +7,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const QRCode = require('qrcode');
 const googleTTS = require('google-tts-api');
-const gplay = require('google-play-scraper'); // අලුත් පැකේජ් එක
+const gplay = require('google-play-scraper');
 const { translate } = require('google-translate-api-x');
 const { requireApiKey } = require('../middleware/apiAuth');
 
@@ -205,11 +205,7 @@ router.get('/mediafire', requireApiKey, async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a MediaFire URL' });
     const response = await axios.get(url, {
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9'
-      },
-      timeout: 15000
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' }, timeout: 15000
     });
     const html = response.data;
     let directLink = null;
@@ -233,54 +229,50 @@ router.get('/mediafire', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 12. APK Downloader ─────
+// ── 12. APK Downloader (3 Fallback APIs) ─────
 router.get('/apk', requireApiKey, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: 'Please provide an app name' });
 
-    // 1. Play Store එකෙන් ඇප් එකේ විස්තර හොයාගන්නවා (මේකෙන් විශ්වාසදායක විස්තර එනවා)
+    // 1. Play Store එකෙන් ඇප් එකේ විස්තර හොයාගන්නවා
     let appData = null;
     try {
       const searchResults = await gplay.search({ term: q, num: 1 });
-      if (searchResults && searchResults.length > 0) {
-        appData = searchResults[0];
-      }
-    } catch (e) {
-      console.error('Play Store search failed');
-    }
+      if (searchResults && searchResults.length > 0) appData = searchResults[0];
+    } catch (e) { console.error('Play Store search failed'); }
 
-    if (!appData) {
-      return res.status(404).json({ error: 'App not found on Play Store.' });
-    }
+    if (!appData) return res.status(404).json({ error: 'App not found on Play Store.' });
 
-    // 2. APK එකේ ඩිරෙක්ට් ලින්ක් එක ගන්නවා (අපේම Fallback API එකක් හරහා)
+    const appId = appData.appId;
     let downloadUrl = null;
-    let lastErr = '';
 
-    // API 1: Siputzx APK Downloader
+    // API 1: Nexoracle
     try {
-      const { data } = await axios.get(`https://api.siputzx.my.id/api/d/apk?q=${encodeURIComponent(appData.appId)}`, { timeout: 15000 });
-      if (data?.status && data?.data?.url) {
-        downloadUrl = data.data.url;
-      }
-    } catch (e) { lastErr = e.message; console.error('APK API 1 failed'); }
+      const { data } = await axios.get(`https://api.nexoracle.com/downloader/apk?apikey=free_key@maher_apis&q=${appId}`, { timeout: 10000 });
+      if (data?.status && data?.result?.url) downloadUrl = data.result.url;
+    } catch (e) { console.log('Nexoracle failed'); }
 
-    // API 2: Vreden APK Downloader (Fallback)
+    // API 2: Ryzendesu
     if (!downloadUrl) {
       try {
-        const { data } = await axios.get(`https://api.vreden.my.id/api/apk?q=${encodeURIComponent(appData.appId)}`, { timeout: 15000 });
-        if (data?.status && data?.result?.url) {
-          downloadUrl = data.result.url;
-        }
-      } catch (e) { lastErr = e.message; console.error('APK API 2 failed'); }
+        const { data } = await axios.get(`https://api.ryzendesu.vip/api/downloader/apk?url=https://play.google.com/store/apps/details?id=${appId}`, { timeout: 10000 });
+        if (data?.status && data?.data?.url) downloadUrl = data.data.url;
+      } catch (e) { console.log('Ryzendesu failed'); }
+    }
+
+    // API 3: Vreden
+    if (!downloadUrl) {
+      try {
+        const { data } = await axios.get(`https://api.vreden.my.id/api/apk?q=${appId}`, { timeout: 10000 });
+        if (data?.status && data?.result?.url) downloadUrl = data.result.url;
+      } catch (e) { console.log('Vreden failed'); }
     }
 
     if (!downloadUrl) {
-      return res.status(404).json({ error: 'Could not find APK download link. App might be paid or region locked.' });
+      return res.status(404).json({ error: 'Direct APK not available. App might be paid or restricted.' });
     }
 
-    // 3. බොට් එකට යවන්න JSON එකක් හදනවා
     res.json({
       success: true,
       title: appData.title,
