@@ -59,18 +59,18 @@ module.exports = [
     example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/facebook?url=https://www.facebook.com/reel/..."`,
     status: 'live'
   },
-  {
-    slug: 'sticker',
-    method: 'POST',
-    title: 'Sticker Maker',
-    tagline: 'Image to WhatsApp sticker in one call.',
-    description: 'Convert any image to webp sticker, auto-cropped and resized to 512x512.',
-    params: [
-      { name: 'file', type: 'file', required: true, example: 'image.png' }
-    ],
-    example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -F "file=@image.png" \\\n  https://api.fixo.dev/sticker`,
-    status: 'coming_soon'
-  },
+ {
+  slug: 'sticker',
+  method: 'POST',
+  title: 'Sticker Maker',
+  tagline: 'Image to WhatsApp sticker in one call.',
+  description: 'Convert any image to webp sticker, auto-cropped and resized to 512x512.',
+  params: [
+    { name: 'image', type: 'file', required: true, example: 'image.png' }
+  ],
+  example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -F "image=@image.png" \\\n  https://api.fixo.dev/sticker`,
+  status: 'live'
+},
   {
     slug: 'qr',
     method: 'GET',
