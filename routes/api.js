@@ -3,8 +3,16 @@ const router = express.Router();
 const axios = require('axios');
 const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
-const { translate } = require('google-translate-api-x'); // අලුත් පැකේජ් එක
+const multer = require('multer');
+const sharp = require('sharp');
+const { translate } = require('google-translate-api-x');
 const { requireApiKey } = require('../middleware/apiAuth');
+
+// ── Multer Setup (Memory Storage) ─────
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // Max 5MB
+});
 
 // ── Helper: Write Cookies ─────
 function getCookieFile(envVar, fileName) {
@@ -113,26 +121,41 @@ router.get('/facebook', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 6. Translate (Using google-translate-api-x) ─────
+// ── 6. Translate ─────
 router.get('/translate', requireApiKey, async (req, res) => {
   try {
     const { text, to, from } = req.query;
-    if (!text || !to) return res.status(400).json({ error: 'Please provide text and a target language (to)' });
-    
-    // අපේම පැකේජ් එකෙන් කෙලින්ම ට්‍රාන්ස්ලේට් කරනවා
+    if (!text || !to) return res.status(400).json({ error: 'Please provide text and a target language' });
     const result = await translate(text, { to: to, from: from || 'auto' });
+    res.json({ success: true, original: text, translated: result.text, from: result.from.language.iso, to: to });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error during translation' });
+  }
+});
 
-    res.json({
-      success: true,
-      original: text,
-      translated: result.text,
-      from: result.from.language.iso,
-      to: to
-    });
+// ── 7. Sticker Maker (Image to WebP) ─────
+router.post('/sticker', requireApiKey, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Please upload an image file using the "image" field.' });
+    }
+
+    // Sharp එකෙන් ඉමේජ් එක 512x512 WebP එකකට හරවනවා
+    const stickerBuffer = await sharp(req.file.buffer)
+      .resize(512, 512, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 } // Transparent background
+      })
+      .webp({ quality: 90 })
+      .toBuffer();
+
+    res.header('Content-Type', 'image/webp');
+    res.header('Content-Disposition', 'attachment; filename="sticker.webp"');
+    res.send(stickerBuffer);
 
   } catch (err) {
-    console.error('[Translate API Error]', err.message);
-    res.status(500).json({ error: 'Server error during translation' });
+    console.error('[Sticker API Error]', err.message);
+    res.status(500).json({ error: 'Error processing image to sticker' });
   }
 });
 
