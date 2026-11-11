@@ -188,25 +188,56 @@ router.get('/ai-image', requireApiKey, async (req, res) => {
   try {
     const { prompt } = req.query;
     if (!prompt) return res.status(400).json({ error: 'Please provide a prompt for the AI' });
-
-    // Pollinations AI එකට රික්වෙස්ට් එක යවනවා
     const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true`;
-
-    const response = await axios.get(imageUrl, {
-      responseType: 'arraybuffer',
-      timeout: 60000 // AI ඉමේජ් හදන්න වෙලා යන නිසා
-    });
-
-    if (!response.data || response.data.length === 0) {
-      throw new Error('Empty image received from AI');
-    }
-
+    const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
+    if (!response.data || response.data.length === 0) throw new Error('Empty image received');
     res.header('Content-Type', 'image/jpeg');
     res.send(Buffer.from(response.data));
+  } catch (err) {
+    res.status(500).json({ error: 'Error generating AI image' });
+  }
+});
+
+// ── 11. MediaFire Downloader ─────
+router.get('/mediafire', requireApiKey, async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'Please provide a MediaFire URL' });
+
+    // MediaFire පේජ් එකේ HTML එක ගන්නවා
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 15000
+    });
+
+    const html = response.data;
+    
+    // HTML එකේ තියෙන ඩිරෙක්ට් ඩවුන්ලෝඩ් ලින්ක් එක හොයාගන්නවා
+    const match = html.match(/href="(https:\/\/download[0-9]+\.mediafire\.com\/[^"]+)"/);
+    
+    if (!match || !match[1]) {
+      return res.status(404).json({ error: 'Could not find direct download link. File might be deleted.' });
+    }
+
+    const directLink = match[1];
+    const fileName = directLink.split('/').pop().split('?')[0]; // ෆයිල් එකේ නම ගන්නවා
+
+    // ඩිරෙක්ට් ලින්ක් එකෙන් ෆයිල් එක ස්ට්‍රීම් කරනවා
+    const fileRes = await axios({
+      method: 'get',
+      url: directLink,
+      responseType: 'stream',
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+
+    res.header('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.header('Content-Type', fileRes.headers['content-type'] || 'application/octet-stream');
+    
+    fileRes.data.pipe(res);
 
   } catch (err) {
-    console.error('[AI Image API Error]', err.message);
-    res.status(500).json({ error: 'Error generating AI image. Please try again.' });
+    console.error('[MediaFire API Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching file from MediaFire' });
   }
 });
 
