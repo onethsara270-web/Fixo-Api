@@ -28,19 +28,6 @@ function getCookieFile(envVar, fileName) {
   }
 }
 
-// ── Helper: Parse Cookies to String for Axios ─────
-function getCookieString(envVar) {
-  if (!process.env[envVar]) return '';
-  const lines = process.env[envVar].split('\n');
-  const cookies = [];
-  for (const line of lines) {
-    if (line.trim() === '' || line.startsWith('#')) continue;
-    const parts = line.split('\t');
-    if (parts.length >= 7) cookies.push(`${parts[5]}=${parts[6]}`);
-  }
-  return cookies.join('; ');
-}
-
 // ── 1. YouTube Song (MP3 Stream) ─────
 router.get('/song', requireApiKey, async (req, res) => {
   try {
@@ -196,69 +183,30 @@ router.get('/tts', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 10. Image Search (Google Scraping with Cookies) ─────
-router.get('/image', requireApiKey, async (req, res) => {
+// ── 10. AI Image Generator (Pollinations.ai) ─────
+router.get('/ai-image', requireApiKey, async (req, res) => {
   try {
-    let { query } = req.query;
-    if (!query) return res.status(400).json({ error: 'Please provide a search query' });
+    const { prompt } = req.query;
+    if (!prompt) return res.status(400).json({ error: 'Please provide a prompt for the AI' });
 
-    let searchQuery = query;
+    // Pollinations AI එකට රික්වෙස්ට් එක යවනවා
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true`;
 
-    // 1. සිංහල අකුරු නම් ඉංග්‍රීසියට හරවනවා
-    try {
-      if (/[\u0D80-\u0DFF]/.test(query)) {
-        const tr = await translate(query, { to: 'en', from: 'si' });
-        if (tr && tr.text) searchQuery = tr.text;
-      }
-    } catch (e) {
-      console.log('Translation failed, continuing with original text.');
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 60000 // AI ඉමේජ් හදන්න වෙලා යන නිසා
+    });
+
+    if (!response.data || response.data.length === 0) {
+      throw new Error('Empty image received from AI');
     }
 
-    // 2. Google Cookies ටික ගන්නවා
-    const googleCookie = getCookieString('GOOGLE_COOKIES');
-    let imageUrls = [];
-
-    // 3. Google Images එකට කෙලින්ම රික්වෙස්ට් එක යවනවා (Cookies සමඟ)
-    try {
-      const googleRes = await axios.get(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&tbm=isch`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Cookie': googleCookie
-        },
-        timeout: 15000
-      });
-
-      const html = googleRes.data;
-      
-      // Google එකේ HTML එකේ තියෙන ඔරිජිනල් ඉමේජ් ලින්ක්ස් (ou) ටික ගන්නවා
-      const regex = /"ou":"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp))"/g;
-      let match;
-      while ((match = regex.exec(html)) !== null && imageUrls.length < 15) {
-        const cleanUrl = match[1].replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
-        if (cleanUrl.startsWith('http')) imageUrls.push(cleanUrl);
-      }
-
-    } catch (e) {
-      console.log('Google Scraping failed:', e.message);
-    }
-
-    // Duplicate අයින් කරනවා
-    imageUrls = [...new Set(imageUrls)];
-
-    if (imageUrls.length === 0) {
-      return res.status(404).json({ error: 'No images found. Try a different keyword or check your Google Cookies.' });
-    }
-
-    // ඉමේජ් ටික ෂෆල් කරනවා
-    imageUrls = imageUrls.sort(() => 0.5 - Math.random());
-
-    res.json({ success: true, query: searchQuery, images: imageUrls });
+    res.header('Content-Type', 'image/jpeg');
+    res.send(Buffer.from(response.data));
 
   } catch (err) {
-    console.error('[Image API Error]', err.message);
-    res.status(200).json({ success: false, error: 'Failed to fetch images. Please try again.' });
+    console.error('[AI Image API Error]', err.message);
+    res.status(500).json({ error: 'Error generating AI image. Please try again.' });
   }
 });
 
