@@ -40,12 +40,6 @@ router.get('/song', requireApiKey, async (req, res) => {
     };
     if (cookieFile) options.cookies = cookieFile;
     const subprocess = youtubedl.exec(url, options);
-    
-    // Error Handler
-    subprocess.on('error', (err) => {
-      if (!res.headersSent) res.status(500).json({ error: 'YouTube download failed.' });
-    });
-
     res.header('Content-Type', 'audio/mpeg');
     res.header('Content-Disposition', 'attachment; filename="audio.mp3"');
     subprocess.stdout.pipe(res);
@@ -66,11 +60,6 @@ router.get('/video', requireApiKey, async (req, res) => {
     };
     if (cookieFile) options.cookies = cookieFile;
     const subprocess = youtubedl.exec(url, options);
-
-    subprocess.on('error', (err) => {
-      if (!res.headersSent) res.status(500).json({ error: 'YouTube download failed.' });
-    });
-
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="video.mp4"');
     subprocess.stdout.pipe(res);
@@ -106,11 +95,6 @@ router.get('/instagram', requireApiKey, async (req, res) => {
     };
     if (cookieFile) options.cookies = cookieFile;
     const subprocess = youtubedl.exec(url, options);
-
-    subprocess.on('error', (err) => {
-      if (!res.headersSent) res.status(500).json({ error: 'Instagram download failed.' });
-    });
-
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="instagram.mp4"');
     subprocess.stdout.pipe(res);
@@ -119,41 +103,31 @@ router.get('/instagram', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 5. Facebook Video (Stream with Cookies - FIXED) ─────
+// ── 5. Facebook Video (Fallback API - Reverted) ─────
 router.get('/facebook', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a Facebook URL' });
-    
-    const cookieFile = getCookieFile('FACEBOOK_COOKIES', 'fb_cookies.txt');
-    
-    // Format එක 'best' කියලා දැම්මම අවුල් යන්නේ නෑ. 502 එරර් එක එන්නේ නැති වෙන්න Error Handler එකක් දැම්මා.
-    const options = {
-      output: '-', 
-      noWarnings: true, 
-      noCallHome: true, 
-      format: 'best',
-      addHeader: [
-        'referer:facebook.com',
-        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      ]
-    };
-    
-    if (cookieFile) options.cookies = cookieFile;
 
-    const subprocess = youtubedl.exec(url, options);
+    // කලින් වැඩ කරපු විදියටම API එකකින් ලින්ක් එක ගන්නවා
+    const apiRes = await axios.get(`https://api.vreden.my.id/api/fb?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+    
+    if (!apiRes.data?.status || !apiRes.data?.result?.download?.url) {
+      throw new Error('API failed to extract video');
+    }
 
-    subprocess.on('error', (err) => {
-      console.error('FB Stream Error:', err.message);
-      if (!res.headersSent) res.status(500).json({ error: 'Facebook download failed or timed out.' });
+    const downloadUrl = apiRes.data.result.download.url;
+    const videoRes = await axios({
+      method: 'get', url: downloadUrl, responseType: 'stream',
+      headers: { 'User-Agent': 'Mozilla/5.0' }
     });
 
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="facebook.mp4"');
-    
-    subprocess.stdout.pipe(res);
+    videoRes.data.pipe(res);
 
   } catch (err) {
+    console.error('[Facebook API Error]', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Facebook blocked the request.' });
   }
 });
@@ -218,7 +192,7 @@ router.get('/tts', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 10. AI Image Generator (Pollinations.ai) ─────
+// ── 10. AI Image Generator ─────
 router.get('/ai-image', requireApiKey, async (req, res) => {
   try {
     const { prompt } = req.query;
@@ -263,7 +237,7 @@ router.get('/mediafire', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 12. APK Downloader (Fixed API Search) ─────
+// ── 12. APK Downloader (Direct API - No Play Store Scraper) ─────
 router.get('/apk', requireApiKey, async (req, res) => {
   try {
     const { q } = req.query;
@@ -271,15 +245,16 @@ router.get('/apk', requireApiKey, async (req, res) => {
 
     let downloadUrl = null;
     let appTitle = q;
+    let developer = 'Unknown';
 
-    // API 1: Siputzx (වඩාත්ම ස්ථාවර APK API එක)
+    // API 1: Nexoracle (කෙලින්ම නමින් හොයනවා)
     try {
-      const { data } = await axios.get(`https://api.siputzx.my.id/api/d/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
-      if (data?.status && data?.data?.url) {
-        downloadUrl = data.data.url;
-        appTitle = data.data.name || q;
+      const { data } = await axios.get(`https://api.nexoracle.com/downloader/apk?apikey=free_key@maher_apis&q=${encodeURIComponent(q)}`, { timeout: 15000 });
+      if (data?.status && data?.result?.url) {
+        downloadUrl = data.result.url;
+        if (data.result.name) appTitle = data.result.name;
       }
-    } catch (e) { console.log('Siputzx APK failed'); }
+    } catch (e) { console.log('Nexoracle APK failed'); }
 
     // API 2: Vreden (Fallback)
     if (!downloadUrl) {
@@ -287,21 +262,35 @@ router.get('/apk', requireApiKey, async (req, res) => {
         const { data } = await axios.get(`https://api.vreden.my.id/api/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
         if (data?.status && data?.result?.url) {
           downloadUrl = data.result.url;
-          appTitle = data.result.name || q;
+          if (data.result.name) appTitle = data.result.name;
         }
       } catch (e) { console.log('Vreden APK failed'); }
     }
 
-    if (!downloadUrl) return res.status(404).json({ error: 'App not found or APK not available.' });
+    // API 3: Siputzx (Fallback)
+    if (!downloadUrl) {
+      try {
+        const { data } = await axios.get(`https://api.siputzx.my.id/api/d/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
+        if (data?.status && data?.data?.url) {
+          downloadUrl = data.data.url;
+          if (data.data.name) appTitle = data.data.name;
+        }
+      } catch (e) { console.log('Siputzx APK failed'); }
+    }
+
+    if (!downloadUrl) {
+      return res.status(404).json({ error: 'App not found or download link unavailable.' });
+    }
 
     res.json({
       success: true,
       title: appTitle,
-      developer: 'Unknown',
+      developer: developer,
       url: downloadUrl
     });
 
   } catch (err) {
+    console.error('[APK API Error]', err.message);
     res.status(500).json({ error: 'Server error while fetching APK' });
   }
 });
