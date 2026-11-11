@@ -7,6 +7,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const QRCode = require('qrcode');
 const googleTTS = require('google-tts-api');
+const gplay = require('google-play-scraper'); // අලුත් පැකේජ් එක
 const { translate } = require('google-translate-api-x');
 const { requireApiKey } = require('../middleware/apiAuth');
 
@@ -203,58 +204,94 @@ router.get('/mediafire', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a MediaFire URL' });
-
-    // 1. MediaFire පේජ් එකේ HTML එක ගන්නවා
     const response = await axios.get(url, {
       headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9'
       },
       timeout: 15000
     });
-
     const html = response.data;
-    
-    // 2. MediaFire හංගලා තියෙන ඩිරෙක්ට් ඩවුන්ලෝඩ් ලින්ක් එක හොයාගන්නවා
-    // සාමාන්‍යයෙන් මේක href="https://download.." විදියට තමයි තියෙන්නේ
+    let directLink = null;
     const match = html.match(/href="(https:\/\/download[0-9]+\.mediafire\.com\/[^"]+)"/);
-    
-    if (!match || !match[1]) {
-      // සමහර වෙලාවට id="downloadButton" විදියට තියෙන්නත් පුළුවන්
+    if (match && match[1]) directLink = match[1];
+    else {
       const btnMatch = html.match(/id="downloadButton"[^>]*href="(https:\/\/[^"]+)"/);
-      if (!btnMatch || !btnMatch[1]) {
-        return res.status(404).json({ error: 'Could not find direct download link. File might be deleted or link is invalid.' });
-      }
-      var directLink = btnMatch[1];
-    } else {
-      var directLink = match[1];
+      if (btnMatch && btnMatch[1]) directLink = btnMatch[1];
     }
-
-    // 3. ෆයිල් එකේ නම ලින්ක් එකෙන් ගන්නවා
+    if (!directLink) return res.status(404).json({ error: 'Could not find direct download link.' });
     const fileName = directLink.split('/').pop().split('?')[0].replace(/%20/g, ' ') || 'mediafire_file';
-
-    // 4. ඩිරෙක්ට් ලින්ක් එකට රික්වෙස්ට් එක යවනවා (Referer එක එක්ක)
     const fileRes = await axios({
-      method: 'get',
-      url: directLink,
-      responseType: 'stream',
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Referer': url // මේක අනිවාර්යයි, නැත්නම් MediaFire බ්ලොක් කරනවා
-      },
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity
+      method: 'get', url: directLink, responseType: 'stream',
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': url }
     });
-
-    // 5. ෆයිල් එක කෙලින්ම යවනවා
     res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
     res.header('Content-Type', fileRes.headers['content-type'] || 'application/octet-stream');
-    
     fileRes.data.pipe(res);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching file from MediaFire' });
+  }
+});
+
+// ── 12. APK Downloader ─────
+router.get('/apk', requireApiKey, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.status(400).json({ error: 'Please provide an app name' });
+
+    // 1. Play Store එකෙන් ඇප් එකේ විස්තර හොයාගන්නවා (මේකෙන් විශ්වාසදායක විස්තර එනවා)
+    let appData = null;
+    try {
+      const searchResults = await gplay.search({ term: q, num: 1 });
+      if (searchResults && searchResults.length > 0) {
+        appData = searchResults[0];
+      }
+    } catch (e) {
+      console.error('Play Store search failed');
+    }
+
+    if (!appData) {
+      return res.status(404).json({ error: 'App not found on Play Store.' });
+    }
+
+    // 2. APK එකේ ඩිරෙක්ට් ලින්ක් එක ගන්නවා (අපේම Fallback API එකක් හරහා)
+    let downloadUrl = null;
+    let lastErr = '';
+
+    // API 1: Siputzx APK Downloader
+    try {
+      const { data } = await axios.get(`https://api.siputzx.my.id/api/d/apk?q=${encodeURIComponent(appData.appId)}`, { timeout: 15000 });
+      if (data?.status && data?.data?.url) {
+        downloadUrl = data.data.url;
+      }
+    } catch (e) { lastErr = e.message; console.error('APK API 1 failed'); }
+
+    // API 2: Vreden APK Downloader (Fallback)
+    if (!downloadUrl) {
+      try {
+        const { data } = await axios.get(`https://api.vreden.my.id/api/apk?q=${encodeURIComponent(appData.appId)}`, { timeout: 15000 });
+        if (data?.status && data?.result?.url) {
+          downloadUrl = data.result.url;
+        }
+      } catch (e) { lastErr = e.message; console.error('APK API 2 failed'); }
+    }
+
+    if (!downloadUrl) {
+      return res.status(404).json({ error: 'Could not find APK download link. App might be paid or region locked.' });
+    }
+
+    // 3. බොට් එකට යවන්න JSON එකක් හදනවා
+    res.json({
+      success: true,
+      title: appData.title,
+      developer: appData.developer,
+      icon: appData.icon,
+      url: downloadUrl
+    });
 
   } catch (err) {
-    console.error('[MediaFire API Error]', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Error fetching file from MediaFire' });
+    console.error('[APK API Error]', err.message);
+    res.status(500).json({ error: 'Server error while fetching APK' });
   }
 });
 
