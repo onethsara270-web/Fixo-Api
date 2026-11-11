@@ -178,8 +178,11 @@ router.get('/tts', requireApiKey, async (req, res) => {
     const { text, lang } = req.query;
     if (!text) return res.status(400).json({ error: 'Please provide text for TTS' });
 
+    // ලංග්වේජ් එක අප්ඩේට් කරගන්නවා (default 'en')
+    const targetLang = lang || 'en';
+
     const base64Data = await googleTTS.getAllAudioBase64(text, {
-      lang: lang || 'en',
+      lang: targetLang,
       slow: false,
       host: 'https://translate.google.com',
     });
@@ -188,14 +191,16 @@ router.get('/tts', requireApiKey, async (req, res) => {
       throw new Error("Failed to generate TTS");
     }
 
-    const buffer = Buffer.from(base64Data[0].base64, 'base64');
+    // කෑලි කිහිපයක් ආවොත් එකට එකතු කරනවා
+    const buffers = base64Data.map(item => Buffer.from(item.base64, 'base64'));
+    const finalBuffer = Buffer.concat(buffers);
 
-    if (buffer.length === 0) {
+    if (finalBuffer.length === 0) {
       throw new Error("Empty TTS buffer");
     }
 
     res.header('Content-Type', 'audio/mpeg');
-    res.send(buffer);
+    res.send(finalBuffer);
   } catch (err) {
     console.error('[TTS API Error]', err);
     res.status(500).json({ error: 'Error generating TTS' });
