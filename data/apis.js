@@ -108,5 +108,17 @@ module.exports = [
     ],
     example: `curl -X POST -H "X-API-KEY: fixo_your_key" \\\n  -d '{"text":"hello"}' \\\n  https://api.fixo.dev/tts`,
     status: 'live'
-  }
+  },
+  {
+  slug: 'ai-image',
+  method: 'GET',
+  title: 'AI Image Generator',
+  tagline: 'Turn your imagination into reality.',
+  description: 'Generate stunning AI images for free using our custom Pollinations.ai engine.',
+  params: [
+    { name: 'prompt', type: 'string', required: true, example: 'a cat wearing a suit' }
+  ],
+  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/ai-image?prompt=a+cat+wearing+a+suit"`,
+  status: 'live'
+}
 ];
