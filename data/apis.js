@@ -120,5 +120,17 @@ module.exports = [
   ],
   example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/ai-image?prompt=a+cat+wearing+a+suit"`,
   status: 'live'
+},
+{
+  slug: 'mediafire',
+  method: 'GET',
+  title: 'MediaFire Downloader',
+  tagline: 'Direct download files from MediaFire.',
+  description: 'Bypass MediaFire pages and download files directly to your bot or app.',
+  params: [
+    { name: 'url', type: 'string', required: true, example: 'https://www.mediafire.com/file/...' }
+  ],
+  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/mediafire?url=https://www.mediafire.com/file/..."`,
+  status: 'live'
 }
 ];
