@@ -5,8 +5,8 @@ const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
 const multer = require('multer');
 const sharp = require('sharp');
-const QRCode = require('qrcode'); // අලුත් එක
-const googleTTS = require('google-tts-api'); // අලුත් එක
+const QRCode = require('qrcode');
+const googleTTS = require('google-tts-api');
 const { translate } = require('google-translate-api-x');
 const { requireApiKey } = require('../middleware/apiAuth');
 
@@ -157,12 +157,11 @@ router.get('/qr', requireApiKey, async (req, res) => {
     const { text } = req.query;
     if (!text) return res.status(400).json({ error: 'Please provide text to generate QR' });
 
-    // QR කෝඩ් එක Buffer එකක් විදියට හදනවා
     const qrBuffer = await QRCode.toBuffer(text, {
       type: 'png',
       width: 512,
       margin: 2,
-      color: { dark: '#08080c', light: '#ffffff' } // අපේ වෙබ්සයිට් එකේ තීම් එකට ගැලපෙන විදියට
+      color: { dark: '#08080c', light: '#ffffff' }
     });
 
     res.header('Content-Type', 'image/png');
@@ -179,15 +178,21 @@ router.get('/tts', requireApiKey, async (req, res) => {
     const { text, lang } = req.query;
     if (!text) return res.status(400).json({ error: 'Please provide text for TTS' });
 
-    // Google TTS එකෙන් ඕඩියෝ ලින්ක් එක ගන්නවා (Auto language split for long text)
     const base64Data = await googleTTS.getAllAudioBase64(text, {
       lang: lang || 'en',
       slow: false,
       host: 'https://translate.google.com',
     });
 
-    // සමහර වෙලාවට ලොකු ටෙක්ස් වලට කෑලි කිහිපයක් එනවා, අපි පළවෙනි එක ගන්නවා
+    if (!base64Data || base64Data.length === 0) {
+      throw new Error("Failed to generate TTS");
+    }
+
     const buffer = Buffer.from(base64Data[0].base64, 'base64');
+
+    if (buffer.length === 0) {
+      throw new Error("Empty TTS buffer");
+    }
 
     res.header('Content-Type', 'audio/mpeg');
     res.send(buffer);
