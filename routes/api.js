@@ -183,46 +183,52 @@ router.get('/tts', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 10. Image Search (Bing Scraping) ─────
+// ── 10. Image Search (Native Google Scraping) ─────
 router.get('/image', requireApiKey, async (req, res) => {
   try {
-    const { query } = req.query;
+    let { query } = req.query;
     if (!query) return res.status(400).json({ error: 'Please provide a search query' });
 
-    let searchQuery = query;
-
-    // Translate to English if Sinhala
+    // Translate to English if Sinhala characters exist
     if (/[\u0D80-\u0DFF]/.test(query)) {
       try {
         const tr = await translate(query, { to: 'en', from: 'si' });
-        searchQuery = tr.text;
-      } catch (e) {}
+        query = tr.text;
+      } catch (e) {
+        console.error('Translation for image search failed');
+      }
     }
 
-    // Bing Images එකෙන් කෙලින්ම ස්ක්‍රැප් කරනවා
-    const response = await axios.get(`https://www.bing.com/images/search?q=${encodeURIComponent(searchQuery)}&form=HDRSC2&first=1`, {
+    // Fetch Google Images HTML directly
+    const response = await axios.get(`https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=isch`, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5'
       },
       timeout: 15000
     });
 
     const html = response.data;
     let imageUrls = [];
-    
-    // HTML එකේ තියෙන murl ටැග් එකෙන් ලින්ක්ස් ගන්නවා
-    const regex = /murl&quot;:&quot;(.*?)&quot;/g;
+
+    // Extract the original high-res image URLs from the embedded JSON metadata
+    const regex = /"ou":"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp))"/g;
     let match;
     while ((match = regex.exec(html)) !== null && imageUrls.length < 15) {
-      const imgUrl = match[1].replace(/&amp;/g, '&');
-      if (imgUrl.startsWith('http')) imageUrls.push(imgUrl);
+      // Clean up escaped characters like \u003d (=) and \u0026 (&)
+      const cleanUrl = match[1].replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
+      imageUrls.push(cleanUrl);
     }
+
+    // Remove duplicates
+    imageUrls = [...new Set(imageUrls)];
 
     if (imageUrls.length === 0) {
       return res.status(404).json({ error: 'No images found for this query.' });
     }
 
-    res.json({ success: true, query: searchQuery, images: imageUrls });
+    res.json({ success: true, query, images: imageUrls });
 
   } catch (err) {
     console.error('[Image API Error]', err.message);
