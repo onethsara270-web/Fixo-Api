@@ -5,6 +5,8 @@ const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
 const multer = require('multer');
 const sharp = require('sharp');
+const QRCode = require('qrcode'); // අලුත් එක
+const googleTTS = require('google-tts-api'); // අලුත් එක
 const { translate } = require('google-translate-api-x');
 const { requireApiKey } = require('../middleware/apiAuth');
 
@@ -136,26 +138,62 @@ router.get('/translate', requireApiKey, async (req, res) => {
 // ── 7. Sticker Maker (Image to WebP) ─────
 router.post('/sticker', requireApiKey, upload.single('image'), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Please upload an image file using the "image" field.' });
-    }
-
-    // Sharp එකෙන් ඉමේජ් එක 512x512 WebP එකකට හරවනවා
+    if (!req.file) return res.status(400).json({ error: 'Please upload an image file using the "image" field.' });
     const stickerBuffer = await sharp(req.file.buffer)
-      .resize(512, 512, {
-        fit: 'contain',
-        background: { r: 0, g: 0, b: 0, alpha: 0 } // Transparent background
-      })
+      .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .webp({ quality: 90 })
       .toBuffer();
-
     res.header('Content-Type', 'image/webp');
     res.header('Content-Disposition', 'attachment; filename="sticker.webp"');
     res.send(stickerBuffer);
-
   } catch (err) {
-    console.error('[Sticker API Error]', err.message);
     res.status(500).json({ error: 'Error processing image to sticker' });
+  }
+});
+
+// ── 8. QR Generator ─────
+router.get('/qr', requireApiKey, async (req, res) => {
+  try {
+    const { text } = req.query;
+    if (!text) return res.status(400).json({ error: 'Please provide text to generate QR' });
+
+    // QR කෝඩ් එක Buffer එකක් විදියට හදනවා
+    const qrBuffer = await QRCode.toBuffer(text, {
+      type: 'png',
+      width: 512,
+      margin: 2,
+      color: { dark: '#08080c', light: '#ffffff' } // අපේ වෙබ්සයිට් එකේ තීම් එකට ගැලපෙන විදියට
+    });
+
+    res.header('Content-Type', 'image/png');
+    res.header('Content-Disposition', 'attachment; filename="qrcode.png"');
+    res.send(qrBuffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Error generating QR code' });
+  }
+});
+
+// ── 9. Text to Speech (TTS) ─────
+router.get('/tts', requireApiKey, async (req, res) => {
+  try {
+    const { text, lang } = req.query;
+    if (!text) return res.status(400).json({ error: 'Please provide text for TTS' });
+
+    // Google TTS එකෙන් ඕඩියෝ ලින්ක් එක ගන්නවා (Auto language split for long text)
+    const base64Data = await googleTTS.getAllAudioBase64(text, {
+      lang: lang || 'en',
+      slow: false,
+      host: 'https://translate.google.com',
+    });
+
+    // සමහර වෙලාවට ලොකු ටෙක්ස් වලට කෑලි කිහිපයක් එනවා, අපි පළවෙනි එක ගන්නවා
+    const buffer = Buffer.from(base64Data[0].base64, 'base64');
+
+    res.header('Content-Type', 'audio/mpeg');
+    res.send(buffer);
+  } catch (err) {
+    console.error('[TTS API Error]', err);
+    res.status(500).json({ error: 'Error generating TTS' });
   }
 });
 
