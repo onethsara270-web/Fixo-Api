@@ -7,7 +7,6 @@ const multer = require('multer');
 const sharp = require('sharp');
 const QRCode = require('qrcode');
 const googleTTS = require('google-tts-api');
-const gplay = require('google-play-scraper');
 const { translate } = require('google-translate-api-x');
 const { requireApiKey } = require('../middleware/apiAuth');
 
@@ -41,6 +40,12 @@ router.get('/song', requireApiKey, async (req, res) => {
     };
     if (cookieFile) options.cookies = cookieFile;
     const subprocess = youtubedl.exec(url, options);
+    
+    // Error Handler
+    subprocess.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'YouTube download failed.' });
+    });
+
     res.header('Content-Type', 'audio/mpeg');
     res.header('Content-Disposition', 'attachment; filename="audio.mp3"');
     subprocess.stdout.pipe(res);
@@ -61,6 +66,11 @@ router.get('/video', requireApiKey, async (req, res) => {
     };
     if (cookieFile) options.cookies = cookieFile;
     const subprocess = youtubedl.exec(url, options);
+
+    subprocess.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'YouTube download failed.' });
+    });
+
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="video.mp4"');
     subprocess.stdout.pipe(res);
@@ -96,6 +106,11 @@ router.get('/instagram', requireApiKey, async (req, res) => {
     };
     if (cookieFile) options.cookies = cookieFile;
     const subprocess = youtubedl.exec(url, options);
+
+    subprocess.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'Instagram download failed.' });
+    });
+
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="instagram.mp4"');
     subprocess.stdout.pipe(res);
@@ -104,21 +119,40 @@ router.get('/instagram', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 5. Facebook Video (Stream with Cookies) ─────
+// ── 5. Facebook Video (Stream with Cookies - FIXED) ─────
 router.get('/facebook', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a Facebook URL' });
+    
     const cookieFile = getCookieFile('FACEBOOK_COOKIES', 'fb_cookies.txt');
+    
+    // Format එක 'best' කියලා දැම්මම අවුල් යන්නේ නෑ. 502 එරර් එක එන්නේ නැති වෙන්න Error Handler එකක් දැම්මා.
     const options = {
-      output: '-', noWarnings: true, noCallHome: true, format: 'best[ext=mp4]',
-      addHeader: ['referer:facebook.com', 'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36']
+      output: '-', 
+      noWarnings: true, 
+      noCallHome: true, 
+      format: 'best',
+      addHeader: [
+        'referer:facebook.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      ]
     };
+    
     if (cookieFile) options.cookies = cookieFile;
+
     const subprocess = youtubedl.exec(url, options);
+
+    subprocess.on('error', (err) => {
+      console.error('FB Stream Error:', err.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Facebook download failed or timed out.' });
+    });
+
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="facebook.mp4"');
+    
     subprocess.stdout.pipe(res);
+
   } catch (err) {
     if (!res.headersSent) res.status(500).json({ error: 'Facebook blocked the request.' });
   }
@@ -229,60 +263,45 @@ router.get('/mediafire', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 12. APK Downloader (3 Fallback APIs) ─────
+// ── 12. APK Downloader (Fixed API Search) ─────
 router.get('/apk', requireApiKey, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: 'Please provide an app name' });
 
-    // 1. Play Store එකෙන් ඇප් එකේ විස්තර හොයාගන්නවා
-    let appData = null;
-    try {
-      const searchResults = await gplay.search({ term: q, num: 1 });
-      if (searchResults && searchResults.length > 0) appData = searchResults[0];
-    } catch (e) { console.error('Play Store search failed'); }
-
-    if (!appData) return res.status(404).json({ error: 'App not found on Play Store.' });
-
-    const appId = appData.appId;
     let downloadUrl = null;
+    let appTitle = q;
 
-    // API 1: Nexoracle
+    // API 1: Siputzx (වඩාත්ම ස්ථාවර APK API එක)
     try {
-      const { data } = await axios.get(`https://api.nexoracle.com/downloader/apk?apikey=free_key@maher_apis&q=${appId}`, { timeout: 10000 });
-      if (data?.status && data?.result?.url) downloadUrl = data.result.url;
-    } catch (e) { console.log('Nexoracle failed'); }
+      const { data } = await axios.get(`https://api.siputzx.my.id/api/d/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
+      if (data?.status && data?.data?.url) {
+        downloadUrl = data.data.url;
+        appTitle = data.data.name || q;
+      }
+    } catch (e) { console.log('Siputzx APK failed'); }
 
-    // API 2: Ryzendesu
+    // API 2: Vreden (Fallback)
     if (!downloadUrl) {
       try {
-        const { data } = await axios.get(`https://api.ryzendesu.vip/api/downloader/apk?url=https://play.google.com/store/apps/details?id=${appId}`, { timeout: 10000 });
-        if (data?.status && data?.data?.url) downloadUrl = data.data.url;
-      } catch (e) { console.log('Ryzendesu failed'); }
+        const { data } = await axios.get(`https://api.vreden.my.id/api/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
+        if (data?.status && data?.result?.url) {
+          downloadUrl = data.result.url;
+          appTitle = data.result.name || q;
+        }
+      } catch (e) { console.log('Vreden APK failed'); }
     }
 
-    // API 3: Vreden
-    if (!downloadUrl) {
-      try {
-        const { data } = await axios.get(`https://api.vreden.my.id/api/apk?q=${appId}`, { timeout: 10000 });
-        if (data?.status && data?.result?.url) downloadUrl = data.result.url;
-      } catch (e) { console.log('Vreden failed'); }
-    }
-
-    if (!downloadUrl) {
-      return res.status(404).json({ error: 'Direct APK not available. App might be paid or restricted.' });
-    }
+    if (!downloadUrl) return res.status(404).json({ error: 'App not found or APK not available.' });
 
     res.json({
       success: true,
-      title: appData.title,
-      developer: appData.developer,
-      icon: appData.icon,
+      title: appTitle,
+      developer: 'Unknown',
       url: downloadUrl
     });
 
   } catch (err) {
-    console.error('[APK API Error]', err.message);
     res.status(500).json({ error: 'Server error while fetching APK' });
   }
 });
