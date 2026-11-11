@@ -183,55 +183,46 @@ router.get('/tts', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 10. Image Search (Robust Fallback) ─────
+// ── 10. Image Search (Bing Scraping) ─────
 router.get('/image', requireApiKey, async (req, res) => {
   try {
     const { query } = req.query;
     if (!query) return res.status(400).json({ error: 'Please provide a search query' });
 
-    let imageUrls = [];
+    let searchQuery = query;
 
-    // API 1: Pinterest Search (ඉතාම ලස්සන ඉමේජ් එනවා)
-    try {
-      const { data } = await axios.get(`https://api.siputzx.my.id/api/s/pinterest?query=${encodeURIComponent(query)}`, { timeout: 10000 });
-      if (data?.status && data?.data?.length > 0) {
-        imageUrls = data.data.map(item => item.image_url || item.url).filter(Boolean);
-      }
-    } catch (e) { console.error('Pinterest API failed'); }
-
-    // API 2: Bing Images (Fallback - වෙනස් API එකක්)
-    if (imageUrls.length === 0) {
+    // Translate to English if Sinhala
+    if (/[\u0D80-\u0DFF]/.test(query)) {
       try {
-        const { data } = await axios.get(`https://api.vreden.my.id/api/image?query=${encodeURIComponent(query)}`, { timeout: 10000 });
-        if (data?.status && data?.result?.length > 0) {
-          imageUrls = data.result;
-        }
-      } catch (e) { console.error('Vreden API failed'); }
+        const tr = await translate(query, { to: 'en', from: 'si' });
+        searchQuery = tr.text;
+      } catch (e) {}
     }
 
-    // API 3: Google Images Scraper (අන්තිම උත්සාහය)
-    if (imageUrls.length === 0) {
-      const response = await axios.get(`https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=isch`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        timeout: 15000
-      });
-      const html = response.data;
-      // .jpg, .jpeg, .png වලින් ඉවර වෙන ලින්ක්ස් විතරක් ගන්නවා
-      const regex = /\["(https:\/\/[^"]+\.(?:jpg|jpeg|png))",/g;
-      let match;
-      while ((match = regex.exec(html)) !== null && imageUrls.length < 10) {
-        imageUrls.push(match[1]);
-      }
-    }
+    // Bing Images එකෙන් කෙලින්ම ස්ක්‍රැප් කරනවා
+    const response = await axios.get(`https://www.bing.com/images/search?q=${encodeURIComponent(searchQuery)}&form=HDRSC2&first=1`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      timeout: 15000
+    });
 
-    // Duplicate අයින් කරනවා
-    imageUrls = [...new Set(imageUrls)];
+    const html = response.data;
+    let imageUrls = [];
+    
+    // HTML එකේ තියෙන murl ටැග් එකෙන් ලින්ක්ස් ගන්නවා
+    const regex = /murl&quot;:&quot;(.*?)&quot;/g;
+    let match;
+    while ((match = regex.exec(html)) !== null && imageUrls.length < 15) {
+      const imgUrl = match[1].replace(/&amp;/g, '&');
+      if (imgUrl.startsWith('http')) imageUrls.push(imgUrl);
+    }
 
     if (imageUrls.length === 0) {
       return res.status(404).json({ error: 'No images found for this query.' });
     }
 
-    res.json({ success: true, query, images: imageUrls });
+    res.json({ success: true, query: searchQuery, images: imageUrls });
 
   } catch (err) {
     console.error('[Image API Error]', err.message);
