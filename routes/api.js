@@ -138,13 +138,12 @@ router.get('/translate', requireApiKey, async (req, res) => {
 // ── 7. Sticker Maker (Image to WebP) ─────
 router.post('/sticker', requireApiKey, upload.single('image'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'Please upload an image file using the "image" field.' });
+    if (!req.file) return res.status(400).json({ error: 'Please upload an image file' });
     const stickerBuffer = await sharp(req.file.buffer)
       .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .webp({ quality: 90 })
       .toBuffer();
     res.header('Content-Type', 'image/webp');
-    res.header('Content-Disposition', 'attachment; filename="sticker.webp"');
     res.send(stickerBuffer);
   } catch (err) {
     res.status(500).json({ error: 'Error processing image to sticker' });
@@ -156,16 +155,10 @@ router.get('/qr', requireApiKey, async (req, res) => {
   try {
     const { text } = req.query;
     if (!text) return res.status(400).json({ error: 'Please provide text to generate QR' });
-
     const qrBuffer = await QRCode.toBuffer(text, {
-      type: 'png',
-      width: 512,
-      margin: 2,
-      color: { dark: '#08080c', light: '#ffffff' }
+      type: 'png', width: 512, margin: 2, color: { dark: '#08080c', light: '#ffffff' }
     });
-
     res.header('Content-Type', 'image/png');
-    res.header('Content-Disposition', 'attachment; filename="qrcode.png"');
     res.send(qrBuffer);
   } catch (err) {
     res.status(500).json({ error: 'Error generating QR code' });
@@ -177,33 +170,72 @@ router.get('/tts', requireApiKey, async (req, res) => {
   try {
     const { text, lang } = req.query;
     if (!text) return res.status(400).json({ error: 'Please provide text for TTS' });
-
-    // ලංග්වේජ් එක අප්ඩේට් කරගන්නවා (default 'en')
     const targetLang = lang || 'en';
-
     const base64Data = await googleTTS.getAllAudioBase64(text, {
-      lang: targetLang,
-      slow: false,
-      host: 'https://translate.google.com',
+      lang: targetLang, slow: false, host: 'https://translate.google.com',
     });
-
-    if (!base64Data || base64Data.length === 0) {
-      throw new Error("Failed to generate TTS");
-    }
-
-    // කෑලි කිහිපයක් ආවොත් එකට එකතු කරනවා
-    const buffers = base64Data.map(item => Buffer.from(item.base64, 'base64'));
-    const finalBuffer = Buffer.concat(buffers);
-
-    if (finalBuffer.length === 0) {
-      throw new Error("Empty TTS buffer");
-    }
-
+    if (!base64Data || base64Data.length === 0) throw new Error("Failed TTS");
+    const finalBuffer = Buffer.concat(base64Data.map(item => Buffer.from(item.base64, 'base64')));
     res.header('Content-Type', 'audio/mpeg');
     res.send(finalBuffer);
   } catch (err) {
-    console.error('[TTS API Error]', err);
     res.status(500).json({ error: 'Error generating TTS' });
+  }
+});
+
+// ── 10. Image Search (Robust Fallback) ─────
+router.get('/image', requireApiKey, async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) return res.status(400).json({ error: 'Please provide a search query' });
+
+    let imageUrls = [];
+
+    // API 1: Pinterest Search (ඉතාම ලස්සන ඉමේජ් එනවා)
+    try {
+      const { data } = await axios.get(`https://api.siputzx.my.id/api/s/pinterest?query=${encodeURIComponent(query)}`, { timeout: 10000 });
+      if (data?.status && data?.data?.length > 0) {
+        imageUrls = data.data.map(item => item.image_url || item.url).filter(Boolean);
+      }
+    } catch (e) { console.error('Pinterest API failed'); }
+
+    // API 2: Bing Images (Fallback - වෙනස් API එකක්)
+    if (imageUrls.length === 0) {
+      try {
+        const { data } = await axios.get(`https://api.vreden.my.id/api/image?query=${encodeURIComponent(query)}`, { timeout: 10000 });
+        if (data?.status && data?.result?.length > 0) {
+          imageUrls = data.result;
+        }
+      } catch (e) { console.error('Vreden API failed'); }
+    }
+
+    // API 3: Google Images Scraper (අන්තිම උත්සාහය)
+    if (imageUrls.length === 0) {
+      const response = await axios.get(`https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=isch`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        timeout: 15000
+      });
+      const html = response.data;
+      // .jpg, .jpeg, .png වලින් ඉවර වෙන ලින්ක්ස් විතරක් ගන්නවා
+      const regex = /\["(https:\/\/[^"]+\.(?:jpg|jpeg|png))",/g;
+      let match;
+      while ((match = regex.exec(html)) !== null && imageUrls.length < 10) {
+        imageUrls.push(match[1]);
+      }
+    }
+
+    // Duplicate අයින් කරනවා
+    imageUrls = [...new Set(imageUrls)];
+
+    if (imageUrls.length === 0) {
+      return res.status(404).json({ error: 'No images found for this query.' });
+    }
+
+    res.json({ success: true, query, images: imageUrls });
+
+  } catch (err) {
+    console.error('[Image API Error]', err.message);
+    res.status(500).json({ error: 'Server error while fetching images' });
   }
 });
 
