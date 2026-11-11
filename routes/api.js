@@ -28,6 +28,19 @@ function getCookieFile(envVar, fileName) {
   }
 }
 
+// ── Helper: Parse Cookies to String for Axios ─────
+function getCookieString(envVar) {
+  if (!process.env[envVar]) return '';
+  const lines = process.env[envVar].split('\n');
+  const cookies = [];
+  for (const line of lines) {
+    if (line.trim() === '' || line.startsWith('#')) continue;
+    const parts = line.split('\t');
+    if (parts.length >= 7) cookies.push(`${parts[5]}=${parts[6]}`);
+  }
+  return cookies.join('; ');
+}
+
 // ── 1. YouTube Song (MP3 Stream) ─────
 router.get('/song', requireApiKey, async (req, res) => {
   try {
@@ -183,7 +196,7 @@ router.get('/tts', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 10. Image Search (Bulletproof Fallback) ─────
+// ── 10. Image Search (Google Scraping with Cookies) ─────
 router.get('/image', requireApiKey, async (req, res) => {
   try {
     let { query } = req.query;
@@ -191,7 +204,7 @@ router.get('/image', requireApiKey, async (req, res) => {
 
     let searchQuery = query;
 
-    // 1. සිංහල අකුරු නම් ඉංග්‍රීසියට හරවනවා (Error එකක් ආවත් ක්‍රෑෂ් වෙන්නේ නෑ)
+    // 1. සිංහල අකුරු නම් ඉංග්‍රීසියට හරවනවා
     try {
       if (/[\u0D80-\u0DFF]/.test(query)) {
         const tr = await translate(query, { to: 'en', from: 'si' });
@@ -201,37 +214,41 @@ router.get('/image', requireApiKey, async (req, res) => {
       console.log('Translation failed, continuing with original text.');
     }
 
+    // 2. Google Cookies ටික ගන්නවා
+    const googleCookie = getCookieString('GOOGLE_COOKIES');
     let imageUrls = [];
 
-    // 2. Bing Async Endpoint (අඩු ආරක්ෂාවක් තියෙන, බ්ලොක් නොවන එක)
+    // 3. Google Images එකට කෙලින්ම රික්වෙස්ට් එක යවනවා (Cookies සමඟ)
     try {
-      const bingRes = await axios.get(`https://www.bing.com/images/async?q=${encodeURIComponent(searchQuery)}&first=1&count=35&relp=35&scenario=ImageBasicHover&datsrc=N_I&layout=RowBased&mmasync=1`, {
-        headers: { 
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
+      const googleRes = await axios.get(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&tbm=isch`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Cookie': googleCookie
         },
-        timeout: 10000
+        timeout: 15000
       });
-      const regex = /murl&quot;:&quot;(.*?)&quot;/g;
+
+      const html = googleRes.data;
+      
+      // Google එකේ HTML එකේ තියෙන ඔරිජිනල් ඉමේජ් ලින්ක්ස් (ou) ටික ගන්නවා
+      const regex = /"ou":"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp))"/g;
       let match;
-      while ((match = regex.exec(bingRes.data)) !== null && imageUrls.length < 15) {
-        imageUrls.push(match[1].replace(/&amp;/g, '&'));
+      while ((match = regex.exec(html)) !== null && imageUrls.length < 15) {
+        const cleanUrl = match[1].replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
+        if (cleanUrl.startsWith('http')) imageUrls.push(cleanUrl);
       }
+
     } catch (e) {
-      console.log('Bing Scrape failed:', e.message);
+      console.log('Google Scraping failed:', e.message);
     }
 
-    // 3. ඒකෙන් බැරි වුනොත් විතරක් ෆෝල්බැක් එකක් (කවදාවත් 500 එන්නේ නෑ)
-    if (imageUrls.length === 0) {
-      try {
-        const { data } = await axios.get(`https://api.vreden.my.id/api/image?query=${encodeURIComponent(searchQuery)}`, { timeout: 8000 });
-        if (data?.status && data?.result) imageUrls = data.result;
-      } catch (e) {
-        console.log('Fallback API failed');
-      }
-    }
+    // Duplicate අයින් කරනවා
+    imageUrls = [...new Set(imageUrls)];
 
     if (imageUrls.length === 0) {
-      return res.status(404).json({ error: 'No images found. Try a different keyword.' });
+      return res.status(404).json({ error: 'No images found. Try a different keyword or check your Google Cookies.' });
     }
 
     // ඉමේජ් ටික ෂෆල් කරනවා
@@ -241,7 +258,6 @@ router.get('/image', requireApiKey, async (req, res) => {
 
   } catch (err) {
     console.error('[Image API Error]', err.message);
-    // 500 වෙනුවට 200 එක්ක error එක එවනවා, එතකොට බොට් එක ක්‍රෑෂ් වෙන්නේ නෑ
     res.status(200).json({ success: false, error: 'Failed to fetch images. Please try again.' });
   }
 });
