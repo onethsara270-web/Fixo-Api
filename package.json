@@ -22,7 +22,9 @@
     "youtube-dl-exec": "^3.1.19",
     "google-translate-api-x": "^10.7.3",
     "multer": "^2.5.0",
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "qrcode": "^1.5.3",
+    "google-tts-api": "^2.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
