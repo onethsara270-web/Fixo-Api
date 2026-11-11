@@ -183,56 +183,66 @@ router.get('/tts', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 10. Image Search (Native Google Scraping) ─────
+// ── 10. Image Search (Bulletproof Fallback) ─────
 router.get('/image', requireApiKey, async (req, res) => {
   try {
     let { query } = req.query;
     if (!query) return res.status(400).json({ error: 'Please provide a search query' });
 
-    // Translate to English if Sinhala characters exist
-    if (/[\u0D80-\u0DFF]/.test(query)) {
-      try {
+    let searchQuery = query;
+
+    // 1. සිංහල අකුරු නම් ඉංග්‍රීසියට හරවනවා (Error එකක් ආවත් ක්‍රෑෂ් වෙන්නේ නෑ)
+    try {
+      if (/[\u0D80-\u0DFF]/.test(query)) {
         const tr = await translate(query, { to: 'en', from: 'si' });
-        query = tr.text;
+        if (tr && tr.text) searchQuery = tr.text;
+      }
+    } catch (e) {
+      console.log('Translation failed, continuing with original text.');
+    }
+
+    let imageUrls = [];
+
+    // 2. Bing Async Endpoint (අඩු ආරක්ෂාවක් තියෙන, බ්ලොක් නොවන එක)
+    try {
+      const bingRes = await axios.get(`https://www.bing.com/images/async?q=${encodeURIComponent(searchQuery)}&first=1&count=35&relp=35&scenario=ImageBasicHover&datsrc=N_I&layout=RowBased&mmasync=1`, {
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
+        },
+        timeout: 10000
+      });
+      const regex = /murl&quot;:&quot;(.*?)&quot;/g;
+      let match;
+      while ((match = regex.exec(bingRes.data)) !== null && imageUrls.length < 15) {
+        imageUrls.push(match[1].replace(/&amp;/g, '&'));
+      }
+    } catch (e) {
+      console.log('Bing Scrape failed:', e.message);
+    }
+
+    // 3. ඒකෙන් බැරි වුනොත් විතරක් ෆෝල්බැක් එකක් (කවදාවත් 500 එන්නේ නෑ)
+    if (imageUrls.length === 0) {
+      try {
+        const { data } = await axios.get(`https://api.vreden.my.id/api/image?query=${encodeURIComponent(searchQuery)}`, { timeout: 8000 });
+        if (data?.status && data?.result) imageUrls = data.result;
       } catch (e) {
-        console.error('Translation for image search failed');
+        console.log('Fallback API failed');
       }
     }
 
-    // Fetch Google Images HTML directly
-    const response = await axios.get(`https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=isch`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5'
-      },
-      timeout: 15000
-    });
-
-    const html = response.data;
-    let imageUrls = [];
-
-    // Extract the original high-res image URLs from the embedded JSON metadata
-    const regex = /"ou":"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp))"/g;
-    let match;
-    while ((match = regex.exec(html)) !== null && imageUrls.length < 15) {
-      // Clean up escaped characters like \u003d (=) and \u0026 (&)
-      const cleanUrl = match[1].replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
-      imageUrls.push(cleanUrl);
-    }
-
-    // Remove duplicates
-    imageUrls = [...new Set(imageUrls)];
-
     if (imageUrls.length === 0) {
-      return res.status(404).json({ error: 'No images found for this query.' });
+      return res.status(404).json({ error: 'No images found. Try a different keyword.' });
     }
 
-    res.json({ success: true, query, images: imageUrls });
+    // ඉමේජ් ටික ෂෆල් කරනවා
+    imageUrls = imageUrls.sort(() => 0.5 - Math.random());
+
+    res.json({ success: true, query: searchQuery, images: imageUrls });
 
   } catch (err) {
     console.error('[Image API Error]', err.message);
-    res.status(500).json({ error: 'Server error while fetching images' });
+    // 500 වෙනුවට 200 එක්ක error එක එවනවා, එතකොට බොට් එක ක්‍රෑෂ් වෙන්නේ නෑ
+    res.status(200).json({ success: false, error: 'Failed to fetch images. Please try again.' });
   }
 });
 
