@@ -132,5 +132,17 @@ module.exports = [
   ],
   example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/mediafire?url=https://www.mediafire.com/file/..."`,
   status: 'live'
+},
+{
+  slug: 'apk',
+  method: 'GET',
+  title: 'APK Downloader',
+  tagline: 'Download Android apps directly.',
+  description: 'Search and download APK files from Google Play Store with a single query.',
+  params: [
+    { name: 'q', type: 'string', required: true, example: 'whatsapp' }
+  ],
+  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/apk?q=whatsapp"`,
+  status: 'live'
 }
 ];
