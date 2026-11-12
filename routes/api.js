@@ -7,7 +7,6 @@ const multer = require('multer');
 const sharp = require('sharp');
 const QRCode = require('qrcode');
 const googleTTS = require('google-tts-api');
-const gplay = require('google-play-scraper'); // Play Store එකෙන් App ID එක ගන්න
 const { translate } = require('google-translate-api-x');
 const { requireApiKey } = require('../middleware/apiAuth');
 
@@ -229,39 +228,30 @@ router.get('/mediafire', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 12. APK Downloader (APKPure Direct Link) ─────
+// ── 12. APK Downloader (Aptoide API) ─────
 router.get('/apk', requireApiKey, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: 'Please provide an app name' });
 
-    // 1. Google Play Store එකෙන් ඇප් එකේ Package ID එක (com.whatsapp) ගන්නවා
-    let appData = null;
-    try {
-      const searchResults = await gplay.search({ term: q, num: 1 });
-      if (searchResults && searchResults.length > 0) {
-        appData = searchResults[0];
-      }
-    } catch (e) {
-      console.error('Play Store search failed:', e.message);
+    // Aptoide API එකට රික්වෙස්ට් එක යවනවා
+    const apiUrl = `http://ws75.aptoide.com/api/7/apps/search/query=${encodeURIComponent(q)}/limit=1`;
+    const { data } = await axios.get(apiUrl, { timeout: 15000 });
+
+    if (!data.datalist || !data.datalist.list || !data.datalist.list.length) {
+      return res.status(404).json({ error: 'App not found.' });
     }
 
-    if (!appData) {
-      return res.status(404).json({ error: 'App not found on Play Store.' });
-    }
+    const app = data.datalist.list[0];
+    const sizeMB = (app.size / (1024 * 1024)).toFixed(2);
 
-    const packageId = appData.appId; // උදා: com.whatsapp
-    const appTitle = appData.title;
-
-    // 2. APKPure එකේ ඩිරෙක්ට් ඩවුන්ලෝඩ් ලින්ක් එක හදනවා
-    const downloadUrl = `https://d.apkpure.com/b/APK/${packageId}?version=latest`;
-
-    // 3. බොට් එකට යවන්න JSON එකක් හදනවා
     res.json({
       success: true,
-      title: appTitle,
-      package: packageId,
-      url: downloadUrl
+      title: app.name,
+      package: app.package,
+      size: `${sizeMB} MB`,
+      url: app.file.path_alt,
+      icon: app.icon
     });
 
   } catch (err) {
