@@ -247,42 +247,43 @@ router.get('/apk', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 13. NPM Package Info & Versions ─────
+// ── 13. NPM Package Info ─────
 router.get('/npm', requireApiKey, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: 'Please provide a package name' });
-
-    // NPM Registry API එකට රික්වෙස්ට් එක යවනවා
     const { data } = await axios.get(`https://registry.npmjs.org/${encodeURIComponent(q)}`, { timeout: 15000 });
-
     if (!data) return res.status(404).json({ error: 'Package not found.' });
-
-    // අලුත්ම version එක සහ විස්තර
     const latestVersion = data['dist-tags']?.latest || 'N/A';
     const description = data.description || 'No description available';
     const author = typeof data.author === 'object' ? data.author.name : (data.author || 'Unknown');
-
-    // Versions ලිස්ට් එක අරගෙන අලුත්ම ඒවා 10ක් විතර ගන්නවා
     const allVersions = Object.keys(data.versions || {});
-    const recentVersions = allVersions.slice(-10).reverse(); // අලුත්ම ඒවා මුලට එන විදියට
-
-    res.json({
-      success: true,
-      name: data.name,
-      description: description,
-      author: author,
-      latest: latestVersion,
-      versions: recentVersions,
-      totalVersions: allVersions.length
-    });
-
+    const recentVersions = allVersions.slice(-10).reverse();
+    res.json({ success: true, name: data.name, description, author, latest: latestVersion, versions: recentVersions, totalVersions: allVersions.length });
   } catch (err) {
-    console.error('[NPM API Error]', err.message);
-    if (err.response && err.response.status === 404) {
-      return res.status(404).json({ error: 'Package not found.' });
-    }
+    if (err.response && err.response.status === 404) return res.status(404).json({ error: 'Package not found.' });
     res.status(500).json({ error: 'Server error while fetching NPM package info' });
+  }
+});
+
+// ── 14. Base64 Encode/Decode ─────
+router.get('/base64', requireApiKey, async (req, res) => {
+  try {
+    const { text, action } = req.query;
+    if (!text || !action) return res.status(400).json({ error: 'Please provide text and action (encode/decode)' });
+
+    let result = '';
+    if (action.toLowerCase() === 'encode' || action.toLowerCase() === 'enc') {
+      result = Buffer.from(text).toString('base64');
+    } else if (action.toLowerCase() === 'decode' || action.toLowerCase() === 'dec') {
+      result = Buffer.from(text, 'base64').toString('utf-8');
+    } else {
+      return res.status(400).json({ error: 'Action must be "encode" or "decode"' });
+    }
+
+    res.json({ success: true, action, original: text, result });
+  } catch (err) {
+    res.status(500).json({ error: 'Error processing Base64 request' });
   }
 });
 
