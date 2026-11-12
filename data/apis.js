@@ -144,5 +144,17 @@ module.exports = [
   ],
   example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/apk?q=whatsapp"`,
   status: 'live'
+},
+{
+  slug: 'npm',
+  method: 'GET',
+  title: 'NPM Package Info',
+  tagline: 'Check NPM package versions and details.',
+  description: 'Get the latest version, author, and recent releases of any NPM package.',
+  params: [
+    { name: 'q', type: 'string', required: true, example: 'express' }
+  ],
+  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/npm?q=express"`,
+  status: 'live'
 }
 ];
