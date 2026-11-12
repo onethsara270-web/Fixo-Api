@@ -233,30 +233,56 @@ router.get('/apk', requireApiKey, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: 'Please provide an app name' });
-
-    // Aptoide API එකට රික්වෙස්ට් එක යවනවා
     const apiUrl = `http://ws75.aptoide.com/api/7/apps/search/query=${encodeURIComponent(q)}/limit=1`;
     const { data } = await axios.get(apiUrl, { timeout: 15000 });
-
     if (!data.datalist || !data.datalist.list || !data.datalist.list.length) {
       return res.status(404).json({ error: 'App not found.' });
     }
-
     const app = data.datalist.list[0];
     const sizeMB = (app.size / (1024 * 1024)).toFixed(2);
-
-    res.json({
-      success: true,
-      title: app.name,
-      package: app.package,
-      size: `${sizeMB} MB`,
-      url: app.file.path_alt,
-      icon: app.icon
-    });
-
+    res.json({ success: true, title: app.name, package: app.package, size: `${sizeMB} MB`, url: app.file.path_alt, icon: app.icon });
   } catch (err) {
     console.error('[APK API Error]', err.message);
     res.status(500).json({ error: 'Server error while fetching APK' });
+  }
+});
+
+// ── 13. NPM Package Info & Versions ─────
+router.get('/npm', requireApiKey, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.status(400).json({ error: 'Please provide a package name' });
+
+    // NPM Registry API එකට රික්වෙස්ට් එක යවනවා
+    const { data } = await axios.get(`https://registry.npmjs.org/${encodeURIComponent(q)}`, { timeout: 15000 });
+
+    if (!data) return res.status(404).json({ error: 'Package not found.' });
+
+    // අලුත්ම version එක සහ විස්තර
+    const latestVersion = data['dist-tags']?.latest || 'N/A';
+    const description = data.description || 'No description available';
+    const author = typeof data.author === 'object' ? data.author.name : (data.author || 'Unknown');
+
+    // Versions ලිස්ට් එක අරගෙන අලුත්ම ඒවා 10ක් විතර ගන්නවා
+    const allVersions = Object.keys(data.versions || {});
+    const recentVersions = allVersions.slice(-10).reverse(); // අලුත්ම ඒවා මුලට එන විදියට
+
+    res.json({
+      success: true,
+      name: data.name,
+      description: description,
+      author: author,
+      latest: latestVersion,
+      versions: recentVersions,
+      totalVersions: allVersions.length
+    });
+
+  } catch (err) {
+    console.error('[NPM API Error]', err.message);
+    if (err.response && err.response.status === 404) {
+      return res.status(404).json({ error: 'Package not found.' });
+    }
+    res.status(500).json({ error: 'Server error while fetching NPM package info' });
   }
 });
 
