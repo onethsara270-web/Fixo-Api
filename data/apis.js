@@ -156,5 +156,18 @@ module.exports = [
   ],
   example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/npm?q=express"`,
   status: 'live'
-}
+},
+{
+  slug: 'base64',
+  method: 'GET',
+  title: 'Base64 Encoder/Decoder',
+  tagline: 'Encode or decode strings to Base64.',
+  description: 'Quickly encode plain text to Base64 or decode Base64 strings back to plain text.',
+  params: [
+    { name: 'text', type: 'string', required: true, example: 'hello' },
+    { name: 'action', type: 'string', required: true, example: 'encode' }
+  ],
+  example: `curl -H "X-API-KEY: fixo_your_key" \\\n  "https://api.fixo.dev/base64?text=hello&action=encode"`,
+  status: 'live'
+},
 ];
