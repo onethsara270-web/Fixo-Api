@@ -7,6 +7,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const QRCode = require('qrcode');
 const googleTTS = require('google-tts-api');
+const gplay = require('google-play-scraper'); // Play Store එකෙන් App ID එක ගන්න
 const { translate } = require('google-translate-api-x');
 const { requireApiKey } = require('../middleware/apiAuth');
 
@@ -103,52 +104,22 @@ router.get('/instagram', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 5. Facebook Video (Cookies + Fallback) ─────
+// ── 5. Facebook Video (Stream with Cookies) ─────
 router.get('/facebook', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a Facebook URL' });
-
     const cookieFile = getCookieFile('FACEBOOK_COOKIES', 'fb_cookies.txt');
-    
     const options = {
-      output: '-',
-      noWarnings: true,
-      noCallHome: true,
-      format: 'best[ext=mp4]/best',
-      addHeader: [
-        'referer:facebook.com',
-        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      ]
+      output: '-', noWarnings: true, noCallHome: true, format: 'best[ext=mp4]/best',
+      addHeader: ['referer:facebook.com', 'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36']
     };
-
     if (cookieFile) options.cookies = cookieFile;
-
     const subprocess = youtubedl.exec(url, options);
-
-    // Error එකක් ආවොත් ඒක අල්ලගන්නවා
-    let hasError = false;
-    subprocess.stderr.on('data', (data) => {
-      const log = data.toString();
-      if (log.includes('ERROR:')) {
-        hasError = true;
-        console.error('[FB yt-dlp Error]', log);
-      }
-    });
-
-    subprocess.on('close', (code) => {
-      if (code !== 0 && !res.headersSent) {
-        hasError = true;
-      }
-    });
-
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="facebook.mp4"');
-    
     subprocess.stdout.pipe(res);
-
   } catch (err) {
-    console.error('[Facebook API Error]', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Facebook blocked the request.' });
   }
 });
@@ -258,55 +229,38 @@ router.get('/mediafire', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 12. APK Downloader (New Reliable APIs) ─────
+// ── 12. APK Downloader (APKPure Direct Link) ─────
 router.get('/apk', requireApiKey, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: 'Please provide an app name' });
 
-    let downloadUrl = null;
-    let appTitle = q;
-    let developer = 'Unknown';
-
-    // API 1: Ryzendesu (ගොඩක් වෙලාවට වැඩ)
+    // 1. Google Play Store එකෙන් ඇප් එකේ Package ID එක (com.whatsapp) ගන්නවා
+    let appData = null;
     try {
-      const { data } = await axios.get(`https://api.ryzendesu.vip/api/downloader/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
-      if (data?.status && data?.data?.url) {
-        downloadUrl = data.data.url;
-        if (data.data.name) appTitle = data.data.name;
+      const searchResults = await gplay.search({ term: q, num: 1 });
+      if (searchResults && searchResults.length > 0) {
+        appData = searchResults[0];
       }
-    } catch (e) { console.log('Ryzendesu APK failed'); }
-
-    // API 2: Siputzx (Fallback)
-    if (!downloadUrl) {
-      try {
-        const { data } = await axios.get(`https://api.siputzx.my.id/api/d/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
-        if (data?.status && data?.data?.url) {
-          downloadUrl = data.data.url;
-          if (data.data.name) appTitle = data.data.name;
-        }
-      } catch (e) { console.log('Siputzx APK failed'); }
+    } catch (e) {
+      console.error('Play Store search failed:', e.message);
     }
 
-    // API 3: Vreden (Fallback)
-    if (!downloadUrl) {
-      try {
-        const { data } = await axios.get(`https://api.vreden.my.id/api/apk?q=${encodeURIComponent(q)}`, { timeout: 15000 });
-        if (data?.status && data?.result?.url) {
-          downloadUrl = data.result.url;
-          if (data.result.name) appTitle = data.result.name;
-        }
-      } catch (e) { console.log('Vreden APK failed'); }
+    if (!appData) {
+      return res.status(404).json({ error: 'App not found on Play Store.' });
     }
 
-    if (!downloadUrl) {
-      return res.status(404).json({ error: 'App not found or download link unavailable.' });
-    }
+    const packageId = appData.appId; // උදා: com.whatsapp
+    const appTitle = appData.title;
 
+    // 2. APKPure එකේ ඩිරෙක්ට් ඩවුන්ලෝඩ් ලින්ක් එක හදනවා
+    const downloadUrl = `https://d.apkpure.com/b/APK/${packageId}?version=latest`;
+
+    // 3. බොට් එකට යවන්න JSON එකක් හදනවා
     res.json({
       success: true,
       title: appTitle,
-      developer: developer,
+      package: packageId,
       url: downloadUrl
     });
 
