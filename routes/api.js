@@ -68,18 +68,45 @@ router.get('/video', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 3. TikTok Video (JSON) ─────
+// ── 3. TikTok Video (JSON Link - yt-dlp + Cookies) ─────
 router.get('/tiktok', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a TikTok URL' });
-    const config = { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 };
-    const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, config);
-    const result = apiRes.data;
-    if (result.code !== 0 || !result.data) return res.status(404).json({ error: 'TikTok video not found.' });
-    res.json({ success: true, title: result.data.title || 'TikTok Video', author: result.data.author?.nickname || 'Unknown', video_url: result.data.play });
+
+    const cookieFile = getCookieFile('TIKTOK_COOKIES', 'tt_cookies.txt');
+    
+    const options = {
+      dumpSingleJson: true, // ලින්ක් එක විතරක් JSON විදියට ගන්නවා
+      noWarnings: true,
+      noCallHome: true,
+      noCheckCertificate: true,
+      addHeader: [
+        'referer:tiktok.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      ]
+    };
+
+    if (cookieFile) options.cookies = cookieFile;
+
+    // yt-dlp එකෙන් වීඩියෝ එකේ ඩේටා ගන්නවා
+    const output = await youtubedl(url, options);
+    
+    if (!output || !output.url) {
+      throw new Error('Failed to extract TikTok video URL');
+    }
+
+    // බොට් එකට ඕන කරන විදියට JSON එක එවනවා (පරණ plugin එකට මේක තමයි ඕන)
+    res.json({
+      success: true,
+      title: output.title || 'TikTok Video',
+      author: output.uploader || 'Unknown',
+      video_url: output.url 
+    });
+
   } catch (err) {
-    res.status(500).json({ error: 'Server error fetching TikTok' });
+    console.error('[TikTok API Error]', err.message);
+    res.status(500).json({ error: 'TikTok blocked the request or video is private.' });
   }
 });
 
@@ -123,168 +150,85 @@ router.get('/facebook', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 6. Translate ─────
+// ── ඉතුරු API ටික (කලින් වගේමයි) ─────
 router.get('/translate', requireApiKey, async (req, res) => {
   try {
     const { text, to, from } = req.query;
-    if (!text || !to) return res.status(400).json({ error: 'Please provide text and a target language' });
-    const result = await translate(text, { to: to, from: from || 'auto' });
+    const result = await translate(text, { to: to || 'en', from: from || 'auto' });
     res.json({ success: true, original: text, translated: result.text, from: result.from.language.iso, to: to });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error during translation' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
 });
 
-// ── 7. Sticker Maker (Image to WebP) ─────
 router.post('/sticker', requireApiKey, upload.single('image'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'Please upload an image file' });
-    const stickerBuffer = await sharp(req.file.buffer)
-      .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .webp({ quality: 90 })
-      .toBuffer();
-    res.header('Content-Type', 'image/webp');
-    res.send(stickerBuffer);
-  } catch (err) {
-    res.status(500).json({ error: 'Error processing image to sticker' });
-  }
+    const stickerBuffer = await sharp(req.file.buffer).resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).webp({ quality: 90 }).toBuffer();
+    res.header('Content-Type', 'image/webp'); res.send(stickerBuffer);
+  } catch (err) { res.status(500).json({ error: 'Error' }); }
 });
 
-// ── 8. QR Generator ─────
 router.get('/qr', requireApiKey, async (req, res) => {
   try {
-    const { text } = req.query;
-    if (!text) return res.status(400).json({ error: 'Please provide text to generate QR' });
-    const qrBuffer = await QRCode.toBuffer(text, {
-      type: 'png', width: 512, margin: 2, color: { dark: '#08080c', light: '#ffffff' }
-    });
-    res.header('Content-Type', 'image/png');
-    res.send(qrBuffer);
-  } catch (err) {
-    res.status(500).json({ error: 'Error generating QR code' });
-  }
+    const qrBuffer = await QRCode.toBuffer(req.query.text, { type: 'png', width: 512, margin: 2 });
+    res.header('Content-Type', 'image/png'); res.send(qrBuffer);
+  } catch (err) { res.status(500).json({ error: 'Error' }); }
 });
 
-// ── 9. Text to Speech (TTS) ─────
 router.get('/tts', requireApiKey, async (req, res) => {
   try {
-    const { text, lang } = req.query;
-    if (!text) return res.status(400).json({ error: 'Please provide text for TTS' });
-    const targetLang = lang || 'en';
-    const base64Data = await googleTTS.getAllAudioBase64(text, {
-      lang: targetLang, slow: false, host: 'https://translate.google.com',
-    });
-    if (!base64Data || base64Data.length === 0) throw new Error("Failed TTS");
-    const finalBuffer = Buffer.concat(base64Data.map(item => Buffer.from(item.base64, 'base64')));
-    res.header('Content-Type', 'audio/mpeg');
-    res.send(finalBuffer);
-  } catch (err) {
-    res.status(500).json({ error: 'Error generating TTS' });
-  }
+    const base64Data = await googleTTS.getAllAudioBase64(req.query.text, { lang: req.query.lang || 'en', slow: false, host: 'https://translate.google.com' });
+    res.header('Content-Type', 'audio/mpeg'); res.send(Buffer.concat(base64Data.map(item => Buffer.from(item.base64, 'base64'))));
+  } catch (err) { res.status(500).json({ error: 'Error' }); }
 });
 
-// ── 10. AI Image Generator ─────
 router.get('/ai-image', requireApiKey, async (req, res) => {
   try {
-    const { prompt } = req.query;
-    if (!prompt) return res.status(400).json({ error: 'Please provide a prompt for the AI' });
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true`;
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(req.query.prompt)}?width=1024&height=1024&nologo=true`;
     const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
-    if (!response.data || response.data.length === 0) throw new Error('Empty image received');
-    res.header('Content-Type', 'image/jpeg');
-    res.send(Buffer.from(response.data));
-  } catch (err) {
-    res.status(500).json({ error: 'Error generating AI image' });
-  }
+    res.header('Content-Type', 'image/jpeg'); res.send(Buffer.from(response.data));
+  } catch (err) { res.status(500).json({ error: 'Error' }); }
 });
 
-// ── 11. MediaFire Downloader ─────
+router.get('/apk', requireApiKey, async (req, res) => {
+  try {
+    const { data } = await axios.get(`http://ws75.aptoide.com/api/7/apps/search/query=${encodeURIComponent(req.query.q)}/limit=1`, { timeout: 15000 });
+    const app = data.datalist.list[0];
+    res.json({ success: true, title: app.name, package: app.package, size: `${(app.size / (1024 * 1024)).toFixed(2)} MB`, url: app.file.path_alt });
+  } catch (err) { res.status(500).json({ error: 'Error' }); }
+});
+
 router.get('/mediafire', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
-    if (!url) return res.status(400).json({ error: 'Please provide a MediaFire URL' });
-    const response = await axios.get(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' }, timeout: 15000
-    });
-    const html = response.data;
-    let directLink = null;
-    const match = html.match(/href="(https:\/\/download[0-9]+\.mediafire\.com\/[^"]+)"/);
-    if (match && match[1]) directLink = match[1];
-    else {
-      const btnMatch = html.match(/id="downloadButton"[^>]*href="(https:\/\/[^"]+)"/);
-      if (btnMatch && btnMatch[1]) directLink = btnMatch[1];
-    }
-    if (!directLink) return res.status(404).json({ error: 'Could not find direct download link.' });
-    const fileName = directLink.split('/').pop().split('?')[0].replace(/%20/g, ' ') || 'mediafire_file';
-    const fileRes = await axios({
-      method: 'get', url: directLink, responseType: 'stream',
-      headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': url }
-    });
-    res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+    const response = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 });
+    const match = response.data.match(/href="(https:\/\/download[0-9]+\.mediafire\.com\/[^"]+)"/);
+    if (!match) return res.status(404).json({ error: 'Link not found' });
+    const fileRes = await axios({ method: 'get', url: match[1], responseType: 'stream' });
     res.header('Content-Type', fileRes.headers['content-type'] || 'application/octet-stream');
     fileRes.data.pipe(res);
-  } catch (err) {
-    if (!res.headersSent) res.status(500).json({ error: 'Error fetching file from MediaFire' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Error' }); }
 });
 
-// ── 12. APK Downloader (Aptoide API) ─────
-router.get('/apk', requireApiKey, async (req, res) => {
-  try {
-    const { q } = req.query;
-    if (!q) return res.status(400).json({ error: 'Please provide an app name' });
-    const apiUrl = `http://ws75.aptoide.com/api/7/apps/search/query=${encodeURIComponent(q)}/limit=1`;
-    const { data } = await axios.get(apiUrl, { timeout: 15000 });
-    if (!data.datalist || !data.datalist.list || !data.datalist.list.length) {
-      return res.status(404).json({ error: 'App not found.' });
-    }
-    const app = data.datalist.list[0];
-    const sizeMB = (app.size / (1024 * 1024)).toFixed(2);
-    res.json({ success: true, title: app.name, package: app.package, size: `${sizeMB} MB`, url: app.file.path_alt, icon: app.icon });
-  } catch (err) {
-    console.error('[APK API Error]', err.message);
-    res.status(500).json({ error: 'Server error while fetching APK' });
-  }
-});
-
-// ── 13. NPM Package Info ─────
 router.get('/npm', requireApiKey, async (req, res) => {
   try {
-    const { q } = req.query;
-    if (!q) return res.status(400).json({ error: 'Please provide a package name' });
-    const { data } = await axios.get(`https://registry.npmjs.org/${encodeURIComponent(q)}`, { timeout: 15000 });
-    if (!data) return res.status(404).json({ error: 'Package not found.' });
-    const latestVersion = data['dist-tags']?.latest || 'N/A';
-    const description = data.description || 'No description available';
-    const author = typeof data.author === 'object' ? data.author.name : (data.author || 'Unknown');
-    const allVersions = Object.keys(data.versions || {});
-    const recentVersions = allVersions.slice(-10).reverse();
-    res.json({ success: true, name: data.name, description, author, latest: latestVersion, versions: recentVersions, totalVersions: allVersions.length });
-  } catch (err) {
-    if (err.response && err.response.status === 404) return res.status(404).json({ error: 'Package not found.' });
-    res.status(500).json({ error: 'Server error while fetching NPM package info' });
-  }
+    const { data } = await axios.get(`https://registry.npmjs.org/${encodeURIComponent(req.query.q)}`, { timeout: 15000 });
+    res.json({ success: true, name: data.name, latest: data['dist-tags']?.latest, description: data.description });
+  } catch (err) { res.status(500).json({ error: 'Error' }); }
 });
 
-// ── 14. Base64 Encode/Decode ─────
 router.get('/base64', requireApiKey, async (req, res) => {
   try {
     const { text, action } = req.query;
-    if (!text || !action) return res.status(400).json({ error: 'Please provide text and action (encode/decode)' });
+    const result = action.startsWith('e') ? Buffer.from(text).toString('base64') : Buffer.from(text, 'base64').toString('utf-8');
+    res.json({ success: true, result });
+  } catch (err) { res.status(500).json({ error: 'Error' }); }
+});
 
-    let result = '';
-    if (action.toLowerCase() === 'encode' || action.toLowerCase() === 'enc') {
-      result = Buffer.from(text).toString('base64');
-    } else if (action.toLowerCase() === 'decode' || action.toLowerCase() === 'dec') {
-      result = Buffer.from(text, 'base64').toString('utf-8');
-    } else {
-      return res.status(400).json({ error: 'Action must be "encode" or "decode"' });
-    }
-
-    res.json({ success: true, action, original: text, result });
-  } catch (err) {
-    res.status(500).json({ error: 'Error processing Base64 request' });
-  }
+router.get('/movie', requireApiKey, async (req, res) => {
+  try {
+    const { data } = await axios.get(`http://www.omdbapi.com/?apikey=b9a5e69d&t=${encodeURIComponent(req.query.q)}`, { timeout: 15000 });
+    if (data.Response === 'False') return res.status(404).json({ error: 'Movie not found' });
+    res.json({ success: true, title: data.Title, year: data.Year, rating: data.imdbRating, plot: data.Plot, poster: data.Poster !== 'N/A' ? data.Poster : null });
+  } catch (err) { res.status(500).json({ error: 'Error' }); }
 });
 
 module.exports = router;
