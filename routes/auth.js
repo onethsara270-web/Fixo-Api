@@ -4,16 +4,6 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const router = express.Router();
 
-// ── Google ────────────────────────────────────────
-router.get('/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
-);
-
-router.get('/google/callback',
-  passport.authenticate('google', { failureRedirect: '/login?error=google_failed' }),
-  (req, res) => res.redirect('/dashboard')
-);
-
 // ── Local register ────────────────────────────────
 router.post('/register', async (req, res) => {
   try {
@@ -62,7 +52,7 @@ router.post('/logout', (req, res, next) => {
   });
 });
 
-// ── Current user (for client-side checks) ────────
+// ── Current user ──────────────────────────────────
 router.get('/me', (req, res) => {
   if (!req.isAuthenticated()) return res.json({ user: null });
   res.json({
