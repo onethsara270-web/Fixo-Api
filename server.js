@@ -12,7 +12,7 @@ const User = require('./models/User');
 
 const app = express();
 
-// ── Trust Proxy (Railway / Render සඳහා අනිවාර්යයි) ─────────────────────
+// ── Trust Proxy (Railway සඳහා අනිවාර්යයි) ──
 app.set('trust proxy', 1);
 
 // ── Database Connection ──────────────────────────────
@@ -20,14 +20,22 @@ mongoose.connect(process.env.MONGO_URI)
   .then(async () => {
     console.log('✓ MongoDB connected');
     
-    // ── Auto-create Admin User ──
+    // ── Auto-create or Update Admin User ──
     try {
       const adminEmail = 'onethsara270@gmail.com';
       const adminPassword = 'oshan123#';
       
       const existingAdmin = await User.findOne({ email: adminEmail });
-      if (!existingAdmin) {
-        const hashedPassword = await bcrypt.hash(adminPassword, 12);
+      const hashedPassword = await bcrypt.hash(adminPassword, 12);
+      
+      if (existingAdmin) {
+        // ඉස්සරහට Account එක තියෙනවා නම්, Password එක සහ Role එක අප්ඩේට් කරනවා
+        existingAdmin.password = hashedPassword;
+        existingAdmin.role = 'admin';
+        await existingAdmin.save();
+        console.log('✓ Admin Account Updated!');
+      } else {
+        // නැත්නම් අලුතෙන් හදනවා
         await User.create({
           email: adminEmail,
           password: hashedPassword,
@@ -67,7 +75,7 @@ app.use(session({
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: false, // ⚠️ මේක false කළා (මේක තමයි ප්‍රශ්නෙ හැදුවේ)
     sameSite: 'lax'
   }
 }));
@@ -88,7 +96,6 @@ app.use('/api', require('./routes/api'));
 app.use('/api/keys', require('./routes/keys'));
 app.use('/admin', require('./routes/admin'));
 
-// ⚠️ pages එක හැමවෙලේම අන්තිමට තියෙන්න ඕන (මොකද ඒකේ '/' තියෙන නිසා)
 app.use('/', require('./routes/pages'));
 
 // ── 404 ───────────────────────────────────────────
