@@ -1,5 +1,4 @@
 const LocalStrategy = require('passport-local').Strategy;
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
@@ -11,7 +10,7 @@ module.exports = (passport) => {
       try {
         const user = await User.findOne({ email: email.toLowerCase() });
         if (!user) return done(null, false, { message: 'No account with that email' });
-        if (!user.password) return done(null, false, { message: 'Use Google login for this account' });
+        if (!user.password) return done(null, false, { message: 'Wrong password' });
 
         const ok = await bcrypt.compare(password, user.password);
         if (!ok) return done(null, false, { message: 'Wrong password' });
@@ -22,45 +21,6 @@ module.exports = (passport) => {
       }
     }
   ));
-
-  // ── Google OAuth ─────────────────────────────────
-  passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: `https://fixo-api-production.up.railway.app/auth/google/callback`
-  }, async (accessToken, refreshToken, profile, done) => {
-    try {
-      let user = await User.findOne({ googleId: profile.id });
-
-      if (!user) {
-        const email = profile.emails && profile.emails.length > 0 ? profile.emails[0].value.toLowerCase() : null;
-        if (!email) return done(null, false, { message: 'No email found from Google' });
-
-        user = await User.findOne({ email });
-
-        // Photo එකක් නැත්නම් null වෙනවා, crash වෙන්නේ නෑ
-        const avatarUrl = profile.photos && profile.photos.length > 0 ? profile.photos[0].value : null;
-
-        if (user) {
-          user.googleId = profile.id;
-          user.avatar = user.avatar || avatarUrl;
-          await user.save();
-        } else {
-          user = await User.create({
-            googleId: profile.id,
-            email,
-            name: profile.displayName,
-            avatar: avatarUrl,
-            role: (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).includes(email) ? 'admin' : 'user'
-          });
-        }
-      }
-
-      return done(null, user);
-    } catch (err) {
-      return done(err);
-    }
-  }));
 
   // ── Session serialization ────────────────────────
   passport.serializeUser((user, done) => done(null, user.id));
