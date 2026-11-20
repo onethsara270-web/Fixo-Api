@@ -28,111 +28,89 @@ function getCookieFile(envVar, fileName) {
   }
 }
 
-// ── 1. YouTube Song (MP3 Stream) ─────
+// ── 1. YouTube Song (MP3 Stream with Cookies) ─────
 router.get('/song', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
+    
     const cookieFile = getCookieFile('YOUTUBE_COOKIES', 'yt_cookies.txt');
     const options = {
       format: 'bestaudio', output: '-', noWarnings: true, noCallHome: true,
       noCheckCertificate: true, youtubeSkipDashManifest: true, jsRuntimes: 'node',
     };
     if (cookieFile) options.cookies = cookieFile;
+    
     const subprocess = youtubedl.exec(url, options);
     res.header('Content-Type', 'audio/mpeg');
     res.header('Content-Disposition', 'attachment; filename="audio.mp3"');
     subprocess.stdout.pipe(res);
+
   } catch (err) {
-    if (!res.headersSent) res.status(500).json({ error: 'Error fetching song' });
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching song details' });
   }
 });
 
-// ── 2. YouTube Video (MP4 Stream) ─────
+// ── 2. YouTube Video (MP4 Stream with Cookies) ─────
 router.get('/video', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
+    
     const cookieFile = getCookieFile('YOUTUBE_COOKIES', 'yt_cookies.txt');
     const options = {
       format: 'best[ext=mp4]', output: '-', noWarnings: true, noCallHome: true,
       noCheckCertificate: true, youtubeSkipDashManifest: true, jsRuntimes: 'node',
     };
     if (cookieFile) options.cookies = cookieFile;
+    
     const subprocess = youtubedl.exec(url, options);
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="video.mp4"');
     subprocess.stdout.pipe(res);
+
   } catch (err) {
-    if (!res.headersSent) res.status(500).json({ error: 'Error fetching video' });
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: 'Error fetching video details' });
   }
 });
 
-// ── 3. TikTok Video (Bulletproof Fallback System) ─────
+// ── 3. TikTok Video Download (Fixo Guaranteed) ─────
 router.get('/tiktok', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a TikTok URL' });
 
-    let videoUrl = null;
-    let title = 'TikTok Video';
-    let author = 'Unknown';
+    const config = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      },
+      timeout: 15000
+    };
 
-    // API 1: tikwm (වේගවත්ම සහ විශ්වාසදායකම)
-    try {
-      const config = { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 10000 };
-      const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, config);
-      if (apiRes.data?.code === 0 && apiRes.data?.data?.play) {
-        videoUrl = apiRes.data.data.play;
-        title = apiRes.data.data.title || title;
-        author = apiRes.data.data.author?.nickname || author;
-      }
-    } catch (e) { console.log('[TikTok] tikwm failed'); }
+    const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, config);
+    const result = apiRes.data;
 
-    // API 2: Vreden (Fallback)
-    if (!videoUrl) {
-      try {
-        const { data } = await axios.get(`https://api.vreden.my.id/api/tiktok?url=${encodeURIComponent(url)}`, { timeout: 10000 });
-        if (data?.status && data?.result?.video) {
-          videoUrl = data.result.video;
-          title = data.result.title || title;
-          author = data.result.author || author;
-        }
-      } catch (e) { console.log('[TikTok] vreden failed'); }
+    if (result.code !== 0 || !result.data) {
+      return res.status(404).json({ error: 'TikTok video not found or private.' });
     }
 
-    // API 3: Siputzx (Fallback)
-    if (!videoUrl) {
-      try {
-        const { data } = await axios.get(`https://api.siputzx.my.id/api/d/tiktok?url=${encodeURIComponent(url)}`, { timeout: 10000 });
-        if (data?.status && data?.data?.url) {
-          videoUrl = data.data.url;
-          title = data.data.title || title;
-          author = data.data.author || author;
-        }
-      } catch (e) { console.log('[TikTok] siputzx failed'); }
-    }
+    const data = result.data;
 
-    if (!videoUrl) {
-      // 500 වෙනුවට 200 එක්ක error එක එවනවා, එතකොට බොට් එක ක්‍රෑෂ් වෙන්නේ නෑ
-      return res.status(200).json({ success: false, error: 'TikTok video not found or all APIs failed.' });
-    }
-
-    // වීඩියෝ එක Stream කරනවා
-    const videoRes = await axios({ 
-      method: 'get', 
-      url: videoUrl, 
-      responseType: 'stream',
-      headers: { 'User-Agent': 'Mozilla/5.0' }
+    res.json({
+      success: true,
+      title: data.title || 'TikTok Video',
+      author: data.author?.nickname || 'Unknown',
+      video_url: data.play,
+      music_url: data.music_info?.play || null,
+      thumbnail: data.cover || null
     });
 
-    res.header('Content-Type', 'video/mp4');
-    res.header('Content-Disposition', 'attachment; filename="tiktok.mp4"');
-    videoRes.data.pipe(res);
-
   } catch (err) {
-    console.error('[TikTok API Error]', err.message);
-    if (!res.headersSent) res.status(200).json({ success: false, error: 'Server error while fetching TikTok.' });
+    console.error('TikTok API Error:', err.message);
+    res.status(500).json({ error: 'Server error while fetching TikTok video. Try again.' });
   }
 });
 
@@ -144,10 +122,7 @@ router.get('/instagram', requireApiKey, async (req, res) => {
     
     const cookieFile = getCookieFile('INSTAGRAM_COOKIES', 'ig_cookies.txt');
     const options = {
-      output: '-', 
-      noWarnings: true, 
-      noCallHome: true, 
-      format: 'best',
+      output: '-', noWarnings: true, noCallHome: true, format: 'best',
       addHeader: [
         'referer:instagram.com', 
         'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -159,7 +134,9 @@ router.get('/instagram', requireApiKey, async (req, res) => {
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="instagram.mp4"');
     subprocess.stdout.pipe(res);
+
   } catch (err) {
+    console.error(err);
     if (!res.headersSent) res.status(500).json({ error: 'Instagram blocked the request' });
   }
 });
@@ -172,10 +149,7 @@ router.get('/facebook', requireApiKey, async (req, res) => {
     
     const cookieFile = getCookieFile('FACEBOOK_COOKIES', 'fb_cookies.txt');
     const options = {
-      output: '-', 
-      noWarnings: true, 
-      noCallHome: true, 
-      format: 'best[ext=mp4]/best',
+      output: '-', noWarnings: true, noCallHome: true, format: 'best[ext=mp4]/best',
       addHeader: [
         'referer:facebook.com', 
         'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -187,7 +161,9 @@ router.get('/facebook', requireApiKey, async (req, res) => {
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="facebook.mp4"');
     subprocess.stdout.pipe(res);
+
   } catch (err) {
+    console.error(err);
     if (!res.headersSent) res.status(500).json({ error: 'Facebook blocked the request.' });
   }
 });
