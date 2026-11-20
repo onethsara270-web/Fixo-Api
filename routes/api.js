@@ -68,67 +68,60 @@ router.get('/video', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 3. TikTok Video (yt-dlp + Fallback Link) ─────
+// ── 3. TikTok Video (Bulletproof Fallback System) ─────
 router.get('/tiktok', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a TikTok URL' });
 
-    let directUrl = null;
+    let videoUrl = null;
     let title = 'TikTok Video';
     let author = 'Unknown';
 
-    // ── ක්‍රමය 1: අපේ සර්වර් එකෙන් කෙලින්ම (yt-dlp + Cookies) ──
+    // API 1: tikwm (වේගවත්ම සහ විශ්වාසදායකම)
     try {
-      const cookieFile = getCookieFile('TIKTOK_COOKIES', 'tt_cookies.txt');
-      const options = {
-        dumpSingleJson: true, // වීඩියෝ එකේ ලින්ක් එක විතරක් JSON විදියට ගන්නවා
-        noWarnings: true,
-        noCallHome: true,
-        noCheckCertificate: true,
-        addHeader: [
-          'referer:tiktok.com',
-          'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        ],
-        // TikTok බ්ලොක් එක මගහරින්න මේක උදව් වෙනවා
-        extractorArgs: { tiktok: { api_hostname: 'api16-normal-c-useast1a.tiktokv.com' } }
-      };
-      if (cookieFile) options.cookies = cookieFile;
-
-      const output = await youtubedl(url, options);
-      if (output && output.url) {
-        directUrl = output.url;
-        title = output.title || title;
-        author = output.uploader || author;
+      const config = { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 10000 };
+      const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, config);
+      if (apiRes.data?.code === 0 && apiRes.data?.data?.play) {
+        videoUrl = apiRes.data.data.play;
+        title = apiRes.data.data.title || title;
+        author = apiRes.data.data.author?.nickname || author;
       }
-    } catch (e) {
-      console.log('[TikTok yt-dlp failed, trying fallback...]');
-    }
+    } catch (e) { console.log('[TikTok] tikwm failed'); }
 
-    // ── ක්‍රමය 2: Fallback (yt-dlp ෆේල් වුනොත් විතරක්) ──
-    if (!directUrl) {
+    // API 2: Vreden (Fallback)
+    if (!videoUrl) {
       try {
-        const config = { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 };
-        const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, config);
-        if (apiRes.data?.code === 0 && apiRes.data?.data?.play) {
-          directUrl = apiRes.data.data.play;
-          title = apiRes.data.data.title || title;
-          author = apiRes.data.data.author?.nickname || author;
+        const { data } = await axios.get(`https://api.vreden.my.id/api/tiktok?url=${encodeURIComponent(url)}`, { timeout: 10000 });
+        if (data?.status && data?.result?.video) {
+          videoUrl = data.result.video;
+          title = data.result.title || title;
+          author = data.result.author || author;
         }
-      } catch (e) {
-        console.log('[TikTok fallback failed]');
-      }
+      } catch (e) { console.log('[TikTok] vreden failed'); }
     }
 
-    // දෙකෙන්ම ලින්ක් එක ආවේ නැත්නම් Error එකක් දෙනවා
-    if (!directUrl) {
-      return res.status(500).json({ error: 'TikTok blocked the request. Please update your cookies.' });
+    // API 3: Siputzx (Fallback)
+    if (!videoUrl) {
+      try {
+        const { data } = await axios.get(`https://api.siputzx.my.id/api/d/tiktok?url=${encodeURIComponent(url)}`, { timeout: 10000 });
+        if (data?.status && data?.data?.url) {
+          videoUrl = data.data.url;
+          title = data.data.title || title;
+          author = data.data.author || author;
+        }
+      } catch (e) { console.log('[TikTok] siputzx failed'); }
+    }
+
+    if (!videoUrl) {
+      // 500 වෙනුවට 200 එක්ක error එක එවනවා, එතකොට බොට් එක ක්‍රෑෂ් වෙන්නේ නෑ
+      return res.status(200).json({ success: false, error: 'TikTok video not found or all APIs failed.' });
     }
 
     // වීඩියෝ එක Stream කරනවා
     const videoRes = await axios({ 
       method: 'get', 
-      url: directUrl, 
+      url: videoUrl, 
       responseType: 'stream',
       headers: { 'User-Agent': 'Mozilla/5.0' }
     });
@@ -139,7 +132,7 @@ router.get('/tiktok', requireApiKey, async (req, res) => {
 
   } catch (err) {
     console.error('[TikTok API Error]', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Server error while fetching TikTok video.' });
+    if (!res.headersSent) res.status(200).json({ success: false, error: 'Server error while fetching TikTok.' });
   }
 });
 
