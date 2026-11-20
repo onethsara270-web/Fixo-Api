@@ -68,37 +68,78 @@ router.get('/video', requireApiKey, async (req, res) => {
   }
 });
 
-// ── 3. TikTok Video (Stream with Cookies) ─────
+// ── 3. TikTok Video (yt-dlp + Fallback Link) ─────
 router.get('/tiktok', requireApiKey, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Please provide a TikTok URL' });
 
-    const cookieFile = getCookieFile('TIKTOK_COOKIES', 'tt_cookies.txt');
-    
-    const options = {
-      format: 'best', // හොඳම වීඩියෝ එක
-      output: '-',    // කෙලින්ම ස්ට්‍රීම් කරන්න
-      noWarnings: true,
-      noCallHome: true,
-      noCheckCertificate: true,
-      addHeader: [
-        'referer:tiktok.com',
-        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      ]
-    };
+    let directUrl = null;
+    let title = 'TikTok Video';
+    let author = 'Unknown';
 
-    if (cookieFile) options.cookies = cookieFile;
+    // ── ක්‍රමය 1: අපේ සර්වර් එකෙන් කෙලින්ම (yt-dlp + Cookies) ──
+    try {
+      const cookieFile = getCookieFile('TIKTOK_COOKIES', 'tt_cookies.txt');
+      const options = {
+        dumpSingleJson: true, // වීඩියෝ එකේ ලින්ක් එක විතරක් JSON විදියට ගන්නවා
+        noWarnings: true,
+        noCallHome: true,
+        noCheckCertificate: true,
+        addHeader: [
+          'referer:tiktok.com',
+          'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ],
+        // TikTok බ්ලොක් එක මගහරින්න මේක උදව් වෙනවා
+        extractorArgs: { tiktok: { api_hostname: 'api16-normal-c-useast1a.tiktokv.com' } }
+      };
+      if (cookieFile) options.cookies = cookieFile;
 
-    const subprocess = youtubedl.exec(url, options);
+      const output = await youtubedl(url, options);
+      if (output && output.url) {
+        directUrl = output.url;
+        title = output.title || title;
+        author = output.uploader || author;
+      }
+    } catch (e) {
+      console.log('[TikTok yt-dlp failed, trying fallback...]');
+    }
+
+    // ── ක්‍රමය 2: Fallback (yt-dlp ෆේල් වුනොත් විතරක්) ──
+    if (!directUrl) {
+      try {
+        const config = { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 };
+        const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, config);
+        if (apiRes.data?.code === 0 && apiRes.data?.data?.play) {
+          directUrl = apiRes.data.data.play;
+          title = apiRes.data.data.title || title;
+          author = apiRes.data.data.author?.nickname || author;
+        }
+      } catch (e) {
+        console.log('[TikTok fallback failed]');
+      }
+    }
+
+    // දෙකෙන්ම ලින්ක් එක ආවේ නැත්නම් Error එකක් දෙනවා
+    if (!directUrl) {
+      return res.status(500).json({ error: 'TikTok blocked the request. Please update your cookies.' });
+    }
+
+    // වීඩියෝ එක Stream කරනවා
+    const videoRes = await axios({ 
+      method: 'get', 
+      url: directUrl, 
+      responseType: 'stream',
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
 
     res.header('Content-Type', 'video/mp4');
     res.header('Content-Disposition', 'attachment; filename="tiktok.mp4"');
-    subprocess.stdout.pipe(res);
+    videoRes.data.pipe(res);
 
   } catch (err) {
     console.error('[TikTok API Error]', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'TikTok blocked the request or video is private.' });
+    if (!res.headersSent) res.status(500).json({ error: 'Server error while fetching TikTok video.' });
   }
 });
 
